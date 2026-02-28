@@ -53,6 +53,7 @@ export interface Message {
   imageDatName?: string
   emojiCdnUrl?: string
   emojiMd5?: string
+  emojiLocalPath?: string   // 本地缓存路径（转发表情包无 CDN URL 时使用）
   voiceDurationSeconds?: number
   videoMd5?: string
   // 引用消息

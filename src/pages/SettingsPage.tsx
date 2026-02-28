@@ -82,6 +82,8 @@ function SettingsPage() {
   const exportExcelColumnsDropdownRef = useRef<HTMLDivElement>(null)
   const exportConcurrencyDropdownRef = useRef<HTMLDivElement>(null)
   const [cachePath, setCachePath] = useState('')
+  const [imageKeyProgress, setImageKeyProgress] = useState(0)
+  const [imageKeyPercent, setImageKeyPercent] = useState<number | null>(null)
 
   const [logEnabled, setLogEnabled] = useState(false)
   const [whisperModelName, setWhisperModelName] = useState('base')
@@ -222,8 +224,28 @@ function SettingsPage() {
     const removeDb = window.electronAPI.key.onDbKeyStatus((payload: { message: string; level: number }) => {
       setDbKeyStatus(payload.message)
     })
-    const removeImage = window.electronAPI.key.onImageKeyStatus((payload: { message: string }) => {
-      setImageKeyStatus(payload.message)
+
+    const removeImage = window.electronAPI.key.onImageKeyStatus((payload: { message: string, percent?: number }) => {
+      let msg = payload.message;
+      let pct = payload.percent;
+
+      // 如果后端没有显式传 percent，则用正则从字符串中提取如 "(12.5%)"
+      if (pct === undefined) {
+        const match = msg.match(/\(([\d.]+)%\)/);
+        if (match) {
+          pct = parseFloat(match[1]);
+          // 将百分比从文本中剥离，让 UI 更清爽
+          msg = msg.replace(/\s*\([\d.]+%\)/, '');
+        }
+      }
+
+      setImageKeyStatus(msg);
+      if (pct !== undefined) {
+        setImageKeyPercent(pct);
+      } else if (msg.includes('启动多核') || msg.includes('定位') || msg.includes('准备')) {
+        // 预热阶段
+        setImageKeyPercent(0);
+      }
     })
     return () => {
       removeDb?.()
@@ -745,15 +767,18 @@ function SettingsPage() {
   }
 
   const handleAutoGetImageKey = async () => {
-    if (isFetchingImageKey) return
+    if (isFetchingImageKey) return;
     if (!dbPath) {
-      showMessage('请先选择数据库目录', false)
-      return
+      showMessage('请先选择数据库目录', false);
+      return;
     }
-    setIsFetchingImageKey(true)
-    setImageKeyStatus('正在准备获取图片密钥...')
+    setIsFetchingImageKey(true);
+    setImageKeyPercent(0)
+    setImageKeyStatus('正在初始化多核爆破引擎...');
+    setImageKeyProgress(0); // 重置进度
+
     try {
-      const accountPath = wxid ? `${dbPath}/${wxid}` : dbPath
+      const accountPath = wxid ? `${dbPath}/${wxid}` : dbPath;
       const result = await window.electronAPI.key.autoGetImageKey(accountPath)
       if (result.success && result.aesKey) {
         if (typeof result.xorKey === 'number') {
@@ -1351,8 +1376,21 @@ function SettingsPage() {
         <button className="btn btn-secondary btn-sm" onClick={handleAutoGetImageKey} disabled={isFetchingImageKey}>
           <Plug size={14} /> {isFetchingImageKey ? '获取中...' : '自动获取图片密钥'}
         </button>
-        {imageKeyStatus && <div className="form-hint status-text">{imageKeyStatus}</div>}
-        {isFetchingImageKey && <div className="form-hint status-text">正在扫描内存，请稍候...</div>}
+        {isFetchingImageKey ? (
+            <div className="brute-force-progress">
+              <div className="status-header">
+                <span className="status-text">{imageKeyStatus || '正在启动多核爆破引擎...'}</span>
+                {imageKeyPercent !== null && <span className="percent">{imageKeyPercent.toFixed(1)}%</span>}
+              </div>
+              {imageKeyPercent !== null && (
+                  <div className="progress-bar-container">
+                    <div className="fill" style={{ width: `${imageKeyPercent}%` }}></div>
+                  </div>
+              )}
+            </div>
+        ) : (
+            imageKeyStatus && <div className="form-hint status-text" style={{ marginTop: '8px' }}>{imageKeyStatus}</div>
+        )}
       </div>
 
       <div className="form-group">

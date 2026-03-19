@@ -3049,9 +3049,10 @@ function ChatPage(props: ChatPageProps) {
           }
 
           // 日期跳转时滚动到顶部，否则滚动到底部
+          const loadedMessages = result.messages
           requestAnimationFrame(() => {
             if (isDateJumpRef.current) {
-              if (messageVirtuosoRef.current && result.messages.length > 0) {
+              if (messageVirtuosoRef.current && loadedMessages.length > 0) {
                 messageVirtuosoRef.current.scrollToIndex({ index: 0, align: 'start', behavior: 'auto' })
               } else if (messageListRef.current) {
                 messageListRef.current.scrollTop = 0
@@ -3060,7 +3061,7 @@ function ChatPage(props: ChatPageProps) {
               return
             }
 
-            const lastIndex = result.messages.length - 1
+            const lastIndex = loadedMessages.length - 1
             if (lastIndex >= 0 && messageVirtuosoRef.current) {
               messageVirtuosoRef.current.scrollToIndex({ index: lastIndex, align: 'end', behavior: 'auto' })
             } else if (messageListRef.current) {
@@ -3083,6 +3084,7 @@ function ChatPage(props: ChatPageProps) {
           }
 
           // 加载更早消息后保持视口锚点，避免跳屏
+          const appendedMessages = result.messages
           requestAnimationFrame(() => {
             if (messageVirtuosoRef.current) {
               if (anchorMessageKeyBeforePrepend) {
@@ -3093,8 +3095,8 @@ function ChatPage(props: ChatPageProps) {
                   return
                 }
               }
-              if (result.messages.length > 0) {
-                messageVirtuosoRef.current.scrollToIndex({ index: result.messages.length, align: 'start', behavior: 'auto' })
+              if (appendedMessages.length > 0) {
+                messageVirtuosoRef.current.scrollToIndex({ index: appendedMessages.length, align: 'start', behavior: 'auto' })
               }
               return
             }
@@ -5652,7 +5654,7 @@ function ChatPage(props: ChatPageProps) {
         )}
         <MemoMessageBubble
           message={msg}
-          session={currentSession}
+          session={currentSession!}
           showTime={!showDateDivider && showTime}
           myAvatarUrl={myAvatarUrl}
           isGroupChat={isCurrentSessionGroup}

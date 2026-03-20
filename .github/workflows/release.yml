@@ -151,6 +151,7 @@ jobs:
           MAC_ASSET="$(pick_asset "\\.dmg$")"
           LINUX_DEB_ASSET="$(pick_asset "\\.deb$")"
           LINUX_TAR_ASSET="$(pick_asset "\\.tar\\.gz$")"
+          LINUX_APPIMAGE_ASSET="$(pick_asset "\\.AppImage$")"
 
           build_link() {
             local name="$1"
@@ -163,6 +164,7 @@ jobs:
           MAC_URL="$(build_link "$MAC_ASSET")"
           LINUX_DEB_URL="$(build_link "$LINUX_DEB_ASSET")"
           LINUX_TAR_URL="$(build_link "$LINUX_TAR_ASSET")"
+          LINUX_APPIMAGE_URL="$(build_link "$LINUX_APPIMAGE_ASSET")"
 
           cat > release_notes.md <<EOF
           ## 更新日志
@@ -174,8 +176,9 @@ jobs:
           ## 下载
           - Windows （Win10+）: ${WINDOWS_URL:-$RELEASE_PAGE}
           - macOS（M系列芯片）: ${MAC_URL:-$RELEASE_PAGE}
-          - Linux (.deb): ${LINUX_DEB_URL:-$RELEASE_PAGE}
+          - Linux (.deb) (即将废弃): ${LINUX_DEB_URL:-$RELEASE_PAGE}
           - Linux (.tar.gz): ${LINUX_TAR_URL:-$RELEASE_PAGE}
+          - linux (.AppImage): ${LINUX_APPIMAGE_URL:-$RELEASE_PAGE}
 
           > 如果某个平台链接暂时未生成，可进入完整发布页查看全部资源：$RELEASE_PAGE
           EOF

@@ -256,11 +256,45 @@ export class KeyServiceLinux {
 
       onProgress?.(`XOR 密钥: 0x${xorKey.toString(16).padStart(2, '0')}，正在查找微信进程...`)
 
-      // 2. 找微信 PID
-      const { stdout } = await execAsync('pidof wechat wechat-bin xwechat').catch(() => ({ stdout: '' }))
-      const pids = stdout.trim().split(/\s+/).filter(p => p)
-      if (pids.length === 0) return { success: false, error: '微信未运行，无法扫描内存' }
-      const pid = parseInt(pids[0], 10)
+      // 2. 找微信 PID（多种方式兜底，兼容不同发行版/安装方式）
+      const envWithPath = {
+        ...process.env,
+        PATH: `${process.env.PATH || ''}:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin`
+      }
+      let pid = 0
+
+      // 方式1: pidof
+      try {
+        const { stdout } = await execAsync('pidof wechat wechat-bin xwechat WeChat', { env: envWithPath })
+        const pids = stdout.trim().split(/\s+/).filter(p => p)
+        if (pids.length > 0) pid = parseInt(pids[0], 10)
+      } catch { /* 未找到进程，继续尝试 */ }
+
+      // 方式2: pgrep 兜底
+      if (!pid) {
+        try {
+          const { stdout } = await execAsync('pgrep -x -i "wechat|wechat-bin|xwechat"', { env: envWithPath })
+          const pids = stdout.trim().split(/\s+/).filter(p => p)
+          if (pids.length > 0) pid = parseInt(pids[0], 10)
+        } catch { /* 继续 */ }
+      }
+
+      // 方式3: ps aux 全名匹配（覆盖 flatpak / AppImage 等场景）
+      if (!pid) {
+        try {
+          const { stdout } = await execAsync('ps aux', { env: envWithPath })
+          for (const line of stdout.split('\n')) {
+            const lower = line.toLowerCase()
+            if (lower.includes('wechat') && !lower.includes('grep')) {
+              const parts = line.trim().split(/\s+/)
+              const candidate = parseInt(parts[1], 10)
+              if (!isNaN(candidate)) { pid = candidate; break }
+            }
+          }
+        } catch { /* 继续 */ }
+      }
+
+      if (!pid) return { success: false, error: '微信未运行，无法扫描内存（已尝试 pidof/pgrep/ps，均未找到微信进程）' }
 
       onProgress?.(`已找到微信进程 PID=${pid}，正在提权扫描进程内存...`);
 

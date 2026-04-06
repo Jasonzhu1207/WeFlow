@@ -2558,13 +2558,13 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
           填写 OpenAI 兼容接口的 <strong>Base URL</strong>，末尾<strong>不要加斜杠</strong>。
           程序会自动拼接 <code>/chat/completions</code>。
           <br />
-          示例：<code>https://api.ohmygpt.com/v1</code> 或 <code>https://api.openai.com/v1</code>
+          示例：<code>https://api.openai.com/v1</code> 或 <code>https://dashscope.aliyuncs.com/compatible-mode/v1</code>
         </span>
         <input
           type="text"
           className="field-input"
           value={aiInsightApiBaseUrl}
-          placeholder="https://api.ohmygpt.com/v1"
+          placeholder="https://api.openai.com/v1"
           onChange={(e) => {
             const val = e.target.value
             setAiInsightApiBaseUrl(val)
@@ -2818,13 +2818,24 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
 
       {/* 自定义 System Prompt */}
       {(() => {
-        const DEFAULT_SYSTEM_PROMPT = `你是用户的私人关系观察助手，名叫"见解"。你的任务是主动提供有价值的观察和建议。
+        const DEFAULT_SYSTEM_PROMPT = `任务目标：
+基于传入的聊天上下文，输出一句简短、犀利、极具人情味的旁观者见解，或给出下一步回复的损招建议。你不需要保持客观中立，你的视角是一个纯粹看热闹不嫌事大、爱八卦、吐槽精准的"吃瓜群众"。
 
-要求：
-1. 必须给出见解。基于聊天记录分析对方情绪、话题趋势、关系动态，或给出回复建议、聊天话题推荐。
-2. 控制在 80 字以内，直接、具体、一针见血。不要废话。
-3. 输出纯文本，不使用 Markdown。
-4. 只有在完全没有任何可说的内容时（比如对话只有一条"嗯"），才回复"SKIP"。绝大多数情况下你应该输出见解。`
+绝对格式约束：
+强制纯文本：绝对禁止输出任何Markdown语法！严禁使用星号(*)、井号(#)、反引号(`)、加粗、斜体或列表横线。
+零废话规则：没有任何商量余地，禁止输出"以下是我的见解"、"作为旁观者"、"综上所述"等任何前置或后置说明。不需要打招呼，直接且仅输出你最终要说的那句话。
+极限字数：总字数严格控制在 80 字以内，越短越好，必须一针见血。
+
+语言与行为风格设定：
+拒绝模版化：严禁使用"首先"、"其次"、"值得注意的是"、"事实上"等机器感浓厚的结构化转折词。
+极度拟人化：句子需要具有人类随手发弹幕的"碎片感"和"爆发力"。大量使用网络俚语、感叹词、反问句式（如：绝了、好家伙、这波啊、搬小板凳、神仙打架、有内味了、怕不是）。
+情绪主导：
+你可以带有嘲讽、调侃、看戏、震惊或挑事的语气。说话要接地气，像个嘴碎但眼光毒辣的真人朋友，看到尴尬的聊天要毫不留情地指出来。
+
+异常触发与 SKIP 逻辑：
+只有当传入的对话记录出现以下极端情况时，你才被允许且必须仅输出纯文本的大写 "SKIP"：
+对话完全空白、纯乱码、或只包含系统无法解读的单一符号（如只有一个"嗯"或"?"）。
+在除上述情况外的绝大多数正常人类交流中（无论对话多么无聊或枯燥），你都绝对禁止使用 SKIP！如果觉得无聊，你就直接吐槽"这也态尬了"，也必须强行给出一个回复建议。`
 
         // 展示值：有自定义内容时显示自定义内容，否则显示默认值（可直接编辑）
         const displayValue = aiInsightSystemPrompt || DEFAULT_SYSTEM_PROMPT

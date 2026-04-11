@@ -2582,10 +2582,6 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   }
 
   const handleSaveWeiboBinding = async (sessionId: string, displayName: string) => {
-    if (!hasWeiboCookieConfigured) {
-      setWeiboBindingErrors((prev) => ({ ...prev, [sessionId]: '请先填写微博 Cookie，再进行 UID 绑定' }))
-      return
-    }
     const draftUid = getWeiboBindingDraftValue(sessionId)
     setWeiboBindingLoadingSessionId(sessionId)
     setWeiboBindingErrors((prev) => {
@@ -2937,6 +2933,9 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
             <span style={{ fontSize: 12, color: hasWeiboCookieConfigured ? 'var(--color-success, #22c55e)' : 'var(--text-tertiary)' }}>
               {hasWeiboCookieConfigured ? '微博 Cookie 已配置' : '微博 Cookie 未配置'}
             </span>
+            <span style={{ fontSize: 12, color: 'var(--color-danger, #ef4444)' }}>
+              不填写更容易触发风控或导致抓取失败
+            </span>
             <button
               className="btn btn-secondary btn-sm"
               type="button"
@@ -2958,11 +2957,6 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
             </label>
           </div>
         </div>
-        {!hasWeiboCookieConfigured && (
-          <span className="form-hint" style={{ marginTop: 8, display: 'block' }}>
-            未配置微博 Cookie 时，开启后也不会发送社交平台内容。
-          </span>
-        )}
       </div>
 
       {aiInsightAllowSocialContext && (

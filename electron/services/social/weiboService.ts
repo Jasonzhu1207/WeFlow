@@ -115,17 +115,6 @@ function requestJson<T>(url: string, options: { cookie: string; referer?: string
   })
 }
 
-function normalizeWeiboUid(input: string): string {
-  const trimmed = String(input || '').trim()
-  const directMatch = trimmed.match(/^\d{5,}$/)
-  if (directMatch) return directMatch[0]
-
-  const linkMatch = trimmed.match(/(?:weibo\.com|m\.weibo\.cn)\/u\/(\d{5,})/i)
-  if (linkMatch) return linkMatch[1]
-
-  throw new Error('请输入有效的微博 UID（纯数字）')
-}
-
 function sanitizeWeiboText(text: string): string {
   return String(text || '')
     .replace(/\u200b|\u200c|\u200d|\ufeff/g, '')
@@ -176,6 +165,17 @@ export function normalizeWeiboCookieInput(rawInput: string): string {
   return trimmed.replace(/^Cookie:\s*/i, '').trim()
 }
 
+export function normalizeWeiboUid(input: string): string {
+  const trimmed = String(input || '').trim()
+  const directMatch = trimmed.match(/^\d{5,}$/)
+  if (directMatch) return directMatch[0]
+
+  const linkMatch = trimmed.match(/(?:weibo\.com|m\.weibo\.cn)\/u\/(\d{5,})/i)
+  if (linkMatch) return linkMatch[1]
+
+  throw new Error('请输入有效的微博 UID（纯数字）')
+}
+
 function buildCacheKey(uid: string, count: number, cookie: string): string {
   const cookieHash = createHash('sha1').update(cookie).digest('hex')
   return `${uid}:${count}:${cookieHash}`
@@ -193,7 +193,7 @@ class WeiboService {
       const uid = normalizeWeiboUid(uidInput)
       const cookie = normalizeWeiboCookieInput(cookieInput)
       if (!cookie) {
-        return { success: false, error: '请先填写有效的微博 Cookie' }
+        return { success: true, uid }
       }
 
       const timeline = await this.fetchTimeline(uid, cookie)

@@ -204,6 +204,8 @@ class InsightService {
    * sessionId -> lastMessageTimestamp（秒，与微信 DB 保持一致）
    */
   private lastSeenTimestamp: Map<string, number> = new Map()
+  /** 活跃分析是否已建立初始基线，避免将历史消息误识别为新活跃 */
+  private activityBaselineReady = false
 
   /**
    * 本地会话快照缓存，避免 analyzeRecentActivity 在每次 DB 变更时都做全量读取。
@@ -290,6 +292,7 @@ class InsightService {
     this.sessionCacheAt = 0
     this.lastActivityAnalysis.clear()
     this.lastSeenTimestamp.clear()
+    this.activityBaselineReady = false
     this.todayTriggers.clear()
     this.todayDate = getStartOfDay()
     weiboService.clearCache()
@@ -541,6 +544,29 @@ class InsightService {
     }
   }
 
+  private async initializeActivityBaselineForWhitelist(whitelist: string[]): Promise<void> {
+    if (!this.dbConnected) {
+      const connectResult = await chatService.connect()
+      if (!connectResult.success) return
+      this.dbConnected = true
+    }
+
+    for (const sessionId of whitelist) {
+      if (!sessionId || sessionId.endsWith('@chatroom')) continue
+      try {
+        const msgsResult = await chatService.getLatestMessages(sessionId, 1)
+        if (!msgsResult.success || !msgsResult.messages || msgsResult.messages.length === 0) continue
+        const latestMsg = msgsResult.messages[0]
+        const latestTs = Number(latestMsg.createTime) || 0
+        if (latestTs > 0) {
+          this.lastSeenTimestamp.set(sessionId, latestTs)
+        }
+      } catch {
+        // 建立基线失败时忽略单个会话，避免影响整体启动
+      }
+    }
+  }
+
   // ── 沉默联系人扫描 ──────────────────────────────────────────────────────────
 
   private scheduleSilenceScan(): void {
@@ -651,9 +677,21 @@ class InsightService {
       const whitelistEnabled = this.config.get('aiInsightWhitelistEnabled') as boolean
       const whitelist = (this.config.get('aiInsightWhitelist') as string[]) || []
 
+      if (whitelistEnabled && whitelist.length === 0) {
+        insightLog('INFO', '白名单已启用但未勾选任何对话，跳过活跃分析')
+        return
+      }
+
       // 白名单启用且有勾选项时，直接用白名单 sessionId，无需查数据库全量会话列表。
       // 通过拉取该会话最新 1 条消息时间戳判断是否真正有新消息，开销极低。
       if (whitelistEnabled && whitelist.length > 0) {
+        if (!this.activityBaselineReady) {
+          await this.initializeActivityBaselineForWhitelist(whitelist)
+          this.activityBaselineReady = true
+          insightLog('INFO', '已为白名单会话建立活跃分析基线，跳过首次触发')
+          return
+        }
+
         // 确保数据库已连接（首次时连接，之后复用）
         if (!this.dbConnected) {
           const connectResult = await chatService.connect()
@@ -707,6 +745,20 @@ class InsightService {
         const id = s.username?.trim() || ''
         return id && !id.endsWith('@chatroom') && !id.toLowerCase().includes('placeholder')
       })
+
+      if (!this.activityBaselineReady) {
+        for (const session of privateSessions) {
+          const sessionId = session.username?.trim() || ''
+          if (!sessionId) continue
+          const currentTimestamp = Number(session.lastTimestamp) || 0
+          if (currentTimestamp > 0) {
+            this.lastSeenTimestamp.set(sessionId, currentTimestamp)
+          }
+        }
+        this.activityBaselineReady = true
+        insightLog('INFO', '已建立活跃分析基线，跳过首次触发')
+        return
+      }
 
       for (const session of privateSessions.slice(0, 10)) {
         const sessionId = session.username?.trim() || ''
@@ -819,8 +871,12 @@ class InsightService {
 
     const globalStatsDesc = `今天全部联系人合计已触发 ${totalTodayTriggers} 条见解。`
 
+    const socialUsageHint = socialContextSection
+      ? '\n补充要求：如果提供了近期微博公开内容，请把它作为辅助线索，与微信对话一起综合分析；若两者冲突，以微信对话为准。'
+      : ''
+
     const userPrompt = `触发原因：${triggerDesc}
-时间统计：${todayStatsDesc} ${globalStatsDesc}${contextSection}${socialContextSection}
+时间统计：${todayStatsDesc} ${globalStatsDesc}${contextSection}${socialContextSection}${socialUsageHint}
 
 请给出你的见解（≤80字）：`
 

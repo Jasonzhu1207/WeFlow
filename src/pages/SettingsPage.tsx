@@ -235,12 +235,14 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const [aiInsightScanIntervalHours, setAiInsightScanIntervalHours] = useState(4)
   const [aiInsightContextCount, setAiInsightContextCount] = useState(40)
   const [aiInsightSocialContextCount, setAiInsightSocialContextCount] = useState(3)
+  const [aiInsightDebugLogEnabled, setAiInsightDebugLogEnabled] = useState(false)
   const [aiInsightSystemPrompt, setAiInsightSystemPrompt] = useState('')
   const [aiInsightTelegramEnabled, setAiInsightTelegramEnabled] = useState(false)
   const [aiInsightTelegramToken, setAiInsightTelegramToken] = useState('')
   const [aiInsightTelegramChatIds, setAiInsightTelegramChatIds] = useState('')
   const [aiInsightWeiboCookie, setAiInsightWeiboCookie] = useState('')
   const [aiInsightWeiboBindings, setAiInsightWeiboBindings] = useState<Record<string, configService.AiInsightWeiboBinding>>({})
+  const [aiInsightWeiboLastError, setAiInsightWeiboLastError] = useState('')
   const [showWeiboCookieModal, setShowWeiboCookieModal] = useState(false)
   const [weiboCookieDraft, setWeiboCookieDraft] = useState('')
   const [weiboCookieError, setWeiboCookieError] = useState('')
@@ -471,12 +473,14 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const savedAiInsightScanIntervalHours = await configService.getAiInsightScanIntervalHours()
   const savedAiInsightContextCount = await configService.getAiInsightContextCount()
   const savedAiInsightSocialContextCount = await configService.getAiInsightSocialContextCount()
+  const savedAiInsightDebugLogEnabled = await configService.getAiInsightDebugLogEnabled()
   const savedAiInsightSystemPrompt = await configService.getAiInsightSystemPrompt()
   const savedAiInsightTelegramEnabled = await configService.getAiInsightTelegramEnabled()
   const savedAiInsightTelegramToken = await configService.getAiInsightTelegramToken()
   const savedAiInsightTelegramChatIds = await configService.getAiInsightTelegramChatIds()
   const savedAiInsightWeiboCookie = await configService.getAiInsightWeiboCookie()
   const savedAiInsightWeiboBindings = await configService.getAiInsightWeiboBindings()
+  const savedAiInsightWeiboLastError = await configService.getAiInsightWeiboLastError()
   setAiInsightEnabled(savedAiInsightEnabled)
   setAiInsightApiBaseUrl(savedAiInsightApiBaseUrl)
   setAiInsightApiKey(savedAiInsightApiKey)
@@ -490,12 +494,14 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   setAiInsightScanIntervalHours(savedAiInsightScanIntervalHours)
   setAiInsightContextCount(savedAiInsightContextCount)
   setAiInsightSocialContextCount(savedAiInsightSocialContextCount)
+  setAiInsightDebugLogEnabled(savedAiInsightDebugLogEnabled)
   setAiInsightSystemPrompt(savedAiInsightSystemPrompt)
   setAiInsightTelegramEnabled(savedAiInsightTelegramEnabled)
   setAiInsightTelegramToken(savedAiInsightTelegramToken)
   setAiInsightTelegramChatIds(savedAiInsightTelegramChatIds)
   setAiInsightWeiboCookie(savedAiInsightWeiboCookie)
   setAiInsightWeiboBindings(savedAiInsightWeiboBindings)
+  setAiInsightWeiboLastError(savedAiInsightWeiboLastError)
 
     } catch (e: any) {
       console.error('加载配置失败:', e)
@@ -2538,6 +2544,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
       }
       const normalized = result.normalized || ''
       setAiInsightWeiboCookie(normalized)
+      setAiInsightWeiboLastError('')
       setWeiboCookieDraft(normalized)
       showMessage(result.hasCookie ? '微博 Cookie 已保存' : '微博 Cookie 已清空', true)
       return true
@@ -2601,7 +2608,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
         ...aiInsightWeiboBindings,
         [sessionId]: {
           uid: result.uid,
-          screenName: result.screenName,
+          screenName: result.screenName || aiInsightWeiboBindings[sessionId]?.screenName,
           updatedAt: Date.now()
         }
       }
@@ -2933,9 +2940,11 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
             <span style={{ fontSize: 12, color: hasWeiboCookieConfigured ? 'var(--color-success, #22c55e)' : 'var(--text-tertiary)' }}>
               {hasWeiboCookieConfigured ? '微博 Cookie 已配置' : '微博 Cookie 未配置'}
             </span>
-            <span style={{ fontSize: 12, color: 'var(--color-danger, #ef4444)' }}>
-              不填写更容易触发风控或导致抓取失败
-            </span>
+            {aiInsightWeiboLastError && (
+              <span style={{ fontSize: 12, color: 'var(--color-danger, #ef4444)' }}>
+                {aiInsightWeiboLastError}
+              </span>
+            )}
             <button
               className="btn btn-secondary btn-sm"
               type="button"
@@ -3325,6 +3334,30 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
           </div>
         )
       })()}
+
+      <div className="divider" />
+
+      <div className="form-group">
+        <label>调试日志</label>
+        <span className="form-hint">
+          开启后，将完整记录每次发给 AI 的提示词、微博补充内容、模型原始回复及必要调试信息到桌面日志文件。默认关闭。
+        </span>
+        <div className="log-toggle-line">
+          <span className="log-status">{aiInsightDebugLogEnabled ? '已开启' : '已关闭'}</span>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={aiInsightDebugLogEnabled}
+              onChange={async (e) => {
+                const val = e.target.checked
+                setAiInsightDebugLogEnabled(val)
+                await configService.setAiInsightDebugLogEnabled(val)
+              }}
+            />
+            <span className="switch-slider" />
+          </label>
+        </div>
+      </div>
 
       <div className="divider" />
 

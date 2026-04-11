@@ -15,8 +15,10 @@
 
 import https from 'https'
 import http from 'http'
+import { appendFile } from 'fs/promises'
+import path from 'path'
 import { URL } from 'url'
-import { Notification } from 'electron'
+import { app, Notification } from 'electron'
 import { ConfigService } from './config'
 import { chatService, ChatSession, Message } from './chatService'
 import { weiboService } from './social/weiboService'
@@ -34,6 +36,7 @@ const SILENCE_SCAN_INITIAL_DELAY_MS = 3 * 60 * 1000
 
 /** 单次 API 请求超时（毫秒） */
 const API_TIMEOUT_MS = 45_000
+const SOCIAL_FAILURE_NOTIFY_COOLDOWN_MS = 30 * 60 * 1000
 
 /** 沉默天数阈值默认值 */
 const DEFAULT_SILENCE_DAYS = 3
@@ -42,8 +45,10 @@ const INSIGHT_CONFIG_KEYS = new Set([
   'aiInsightScanIntervalHours',
   'aiInsightAllowSocialContext',
   'aiInsightSocialContextCount',
+  'aiInsightDebugLogEnabled',
   'aiInsightWeiboCookie',
   'aiInsightWeiboBindings',
+  'aiInsightWeiboLastError',
   'dbPath',
   'decryptKey',
   'myWxid'
@@ -206,6 +211,8 @@ class InsightService {
   private lastSeenTimestamp: Map<string, number> = new Map()
   /** 活跃分析是否已建立初始基线，避免将历史消息误识别为新活跃 */
   private activityBaselineReady = false
+  /** 社交平台获取失败通知节流 */
+  private lastSocialFailureNotifyAt: Map<string, number> = new Map()
 
   /**
    * 本地会话快照缓存，避免 analyzeRecentActivity 在每次 DB 变更时都做全量读取。
@@ -293,6 +300,7 @@ class InsightService {
     this.lastActivityAnalysis.clear()
     this.lastSeenTimestamp.clear()
     this.activityBaselineReady = false
+    this.lastSocialFailureNotifyAt.clear()
     this.todayTriggers.clear()
     this.todayDate = getStartOfDay()
     weiboService.clearCache()
@@ -512,6 +520,46 @@ class InsightService {
     return new Date(parsed).toLocaleString('zh-CN')
   }
 
+  private recordWeiboLastError(message: string): void {
+    this.config.set('aiInsightWeiboLastError' as any, message as any)
+  }
+
+  private clearWeiboLastError(): void {
+    const current = String(this.config.get('aiInsightWeiboLastError' as any) || '')
+    if (current) {
+      this.config.set('aiInsightWeiboLastError' as any, '' as any)
+    }
+  }
+
+  private notifySocialFetchFailure(uid: string, screenName: string | undefined, errorMessage: string): void {
+    const now = Date.now()
+    const lastAt = this.lastSocialFailureNotifyAt.get(uid) ?? 0
+    if (now - lastAt < SOCIAL_FAILURE_NOTIFY_COOLDOWN_MS) return
+    this.lastSocialFailureNotifyAt.set(uid, now)
+
+    const title = `微博内容获取失败 · ${screenName || uid}`
+    const body = errorMessage.length > 120 ? `${errorMessage.slice(0, 120)}...` : errorMessage
+    if (Notification.isSupported()) {
+      new Notification({ title, body, silent: false }).show()
+    } else {
+      insightLog('WARN', `${title}: ${body}`)
+    }
+  }
+
+  private async writeDebugLog(title: string, payload: Record<string, unknown>): Promise<void> {
+    if (this.config.get('aiInsightDebugLogEnabled') !== true) return
+    try {
+      const desktopPath = app.getPath('desktop')
+      const date = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')
+      const logPath = path.join(desktopPath, `weflow-ai-insight-debug-${date}.log`)
+      const ts = new Date().toLocaleString('zh-CN')
+      const content = [`[${ts}] ${title}`, JSON.stringify(payload, null, 2), ''].join('\n')
+      await appendFile(logPath, `${content}\n`, 'utf8')
+    } catch (error) {
+      insightLog('WARN', `写入 AI 见解调试日志失败: ${(error as Error).message}`)
+    }
+  }
+
   private async getSocialContextSection(sessionId: string): Promise<string> {
     const allowSocialContext = this.config.get('aiInsightAllowSocialContext') === true
     if (!allowSocialContext) return ''
@@ -529,17 +577,24 @@ class InsightService {
 
     try {
       const posts = await weiboService.fetchRecentPosts(uid, rawCookie, socialCount)
-      if (posts.length === 0) return ''
+      if (posts.length === 0) {
+        this.clearWeiboLastError()
+        return ''
+      }
 
       const lines = posts.map((post) => {
         const time = this.formatWeiboTimestamp(post.createdAt)
         const text = post.text.length > 180 ? `${post.text.slice(0, 180)}...` : post.text
         return `[微博 ${time}] ${text}`
       })
+      this.clearWeiboLastError()
       insightLog('INFO', `已加载 ${lines.length} 条微博公开内容 (uid=${uid})`)
       return `\n\n近期公开社交平台内容（实验性，来源：微博，最近 ${lines.length} 条）：\n${lines.join('\n')}`
     } catch (error) {
-      insightLog('WARN', `拉取微博公开内容失败 (uid=${uid}): ${(error as Error).message}`)
+      const errorMessage = (error as Error).message || '未知错误'
+      this.recordWeiboLastError(`微博内容获取失败：${errorMessage}`)
+      this.notifySocialFetchFailure(uid, binding?.screenName, errorMessage)
+      insightLog('WARN', `拉取微博公开内容失败 (uid=${uid}): ${errorMessage}`)
       return ''
     }
   }
@@ -872,7 +927,7 @@ class InsightService {
     const globalStatsDesc = `今天全部联系人合计已触发 ${totalTodayTriggers} 条见解。`
 
     const socialUsageHint = socialContextSection
-      ? '\n补充要求：如果提供了近期微博公开内容，请把它作为辅助线索，与微信对话一起综合分析；若两者冲突，以微信对话为准。'
+      ? '\n补充要求：下面已经提供了近期微博公开内容，你必须先阅读并与微信对话一起综合分析；若两者冲突，以微信对话为准。'
       : ''
 
     const userPrompt = `触发原因：${triggerDesc}
@@ -882,6 +937,18 @@ class InsightService {
 
     const endpoint = buildApiUrl(apiBaseUrl, '/chat/completions')
     insightLog('INFO', `准备调用 API: ${endpoint}，模型: ${model}`)
+    await this.writeDebugLog('AI 见解请求', {
+      sessionId,
+      displayName,
+      triggerReason,
+      model,
+      endpoint,
+      allowContext,
+      contextCount,
+      socialContextEnabled: this.config.get('aiInsightAllowSocialContext') === true,
+      systemPrompt,
+      userPrompt
+    })
 
     try {
       const result = await callApi(
@@ -895,6 +962,12 @@ class InsightService {
       )
 
       insightLog('INFO', `API 返回原文: ${result.slice(0, 150)}`)
+      await this.writeDebugLog('AI 见解响应', {
+        sessionId,
+        displayName,
+        triggerReason,
+        response: result
+      })
 
       // 模型主动选择跳过
       if (result.trim().toUpperCase() === 'SKIP' || result.trim().startsWith('SKIP')) {
@@ -936,6 +1009,12 @@ class InsightService {
 
       insightLog('INFO', `已为 ${displayName} 推送见解`)
     } catch (e) {
+      await this.writeDebugLog('AI 见解调用失败', {
+        sessionId,
+        displayName,
+        triggerReason,
+        error: (e as Error).message
+      })
       insightLog('ERROR', `API 调用失败 (${displayName}): ${(e as Error).message}`)
     }
   }

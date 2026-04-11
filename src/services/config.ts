@@ -96,12 +96,14 @@ export const CONFIG_KEYS = {
   AI_INSIGHT_SCAN_INTERVAL_HOURS: 'aiInsightScanIntervalHours',
   AI_INSIGHT_CONTEXT_COUNT: 'aiInsightContextCount',
   AI_INSIGHT_SOCIAL_CONTEXT_COUNT: 'aiInsightSocialContextCount',
+  AI_INSIGHT_DEBUG_LOG_ENABLED: 'aiInsightDebugLogEnabled',
   AI_INSIGHT_SYSTEM_PROMPT: 'aiInsightSystemPrompt',
   AI_INSIGHT_TELEGRAM_ENABLED: 'aiInsightTelegramEnabled',
   AI_INSIGHT_TELEGRAM_TOKEN: 'aiInsightTelegramToken',
   AI_INSIGHT_TELEGRAM_CHAT_IDS: 'aiInsightTelegramChatIds',
   AI_INSIGHT_WEIBO_COOKIE: 'aiInsightWeiboCookie',
-  AI_INSIGHT_WEIBO_BINDINGS: 'aiInsightWeiboBindings'
+  AI_INSIGHT_WEIBO_BINDINGS: 'aiInsightWeiboBindings',
+  AI_INSIGHT_WEIBO_LAST_ERROR: 'aiInsightWeiboLastError'
 } as const
 
 export interface WxidConfig {
@@ -1713,6 +1715,15 @@ export async function setAiInsightSocialContextCount(count: number): Promise<voi
   await config.set(CONFIG_KEYS.AI_INSIGHT_SOCIAL_CONTEXT_COUNT, count)
 }
 
+export async function getAiInsightDebugLogEnabled(): Promise<boolean> {
+  const value = await config.get(CONFIG_KEYS.AI_INSIGHT_DEBUG_LOG_ENABLED)
+  return value === true
+}
+
+export async function setAiInsightDebugLogEnabled(enabled: boolean): Promise<void> {
+  await config.set(CONFIG_KEYS.AI_INSIGHT_DEBUG_LOG_ENABLED, enabled)
+}
+
 export async function getAiInsightSystemPrompt(): Promise<string> {
   const value = await config.get(CONFIG_KEYS.AI_INSIGHT_SYSTEM_PROMPT)
   return typeof value === 'string' ? value : ''
@@ -1766,4 +1777,13 @@ export async function getAiInsightWeiboBindings(): Promise<Record<string, AiInsi
 
 export async function setAiInsightWeiboBindings(bindings: Record<string, AiInsightWeiboBinding>): Promise<void> {
   await config.set(CONFIG_KEYS.AI_INSIGHT_WEIBO_BINDINGS, bindings)
+}
+
+export async function getAiInsightWeiboLastError(): Promise<string> {
+  const value = await config.get(CONFIG_KEYS.AI_INSIGHT_WEIBO_LAST_ERROR)
+  return typeof value === 'string' ? value : ''
+}
+
+export async function setAiInsightWeiboLastError(message: string): Promise<void> {
+  await config.set(CONFIG_KEYS.AI_INSIGHT_WEIBO_LAST_ERROR, message)
 }

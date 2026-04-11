@@ -1643,6 +1643,7 @@ function registerIpcHandlers() {
       }
       const normalized = normalizeWeiboCookieInput(rawInput)
       configService.set('aiInsightWeiboCookie' as any, normalized as any)
+      configService.set('aiInsightWeiboLastError' as any, '' as any)
       weiboService.clearCache()
       return { success: true, normalized, hasCookie: Boolean(normalized) }
     } catch (error) {

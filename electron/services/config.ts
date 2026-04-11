@@ -88,6 +88,8 @@ interface ConfigSchema {
   aiInsightContextCount: number
   /** 发送外部社交内容时的最大条数 */
   aiInsightSocialContextCount: number
+  /** 是否输出 AI 见解调试日志到桌面 */
+  aiInsightDebugLogEnabled: boolean
   /** 自定义 system prompt，空字符串表示使用内置默认值 */
   aiInsightSystemPrompt: string
   /** 是否启用 Telegram 推送 */
@@ -100,6 +102,8 @@ interface ConfigSchema {
   aiInsightWeiboCookie: string
   /** 会话到微博 UID 的手动绑定关系 */
   aiInsightWeiboBindings: Record<string, { uid: string; screenName?: string; updatedAt: number }>
+  /** 最近一次微博内容获取失败提示 */
+  aiInsightWeiboLastError: string
 }
 
 // 需要 safeStorage 加密的字段（普通模式）
@@ -187,12 +191,14 @@ export class ConfigService {
       aiInsightScanIntervalHours: 4,
       aiInsightContextCount: 40,
       aiInsightSocialContextCount: 3,
+      aiInsightDebugLogEnabled: false,
       aiInsightSystemPrompt: '',
       aiInsightTelegramEnabled: false,
       aiInsightTelegramToken: '',
       aiInsightTelegramChatIds: '',
       aiInsightWeiboCookie: '',
-      aiInsightWeiboBindings: {}
+      aiInsightWeiboBindings: {},
+      aiInsightWeiboLastError: ''
     }
 
     const storeOptions: any = {

@@ -2391,6 +2391,21 @@ function registerIpcHandlers() {
     return chatService.searchMessages(keyword, sessionId, limit, offset, beginTimestamp, endTimestamp)
   })
 
+  ipcMain.handle('chat:getMyFootprintStats', async (_, beginTimestamp: number, endTimestamp: number, options?: {
+    myWxid?: string
+    privateSessionIds?: string[]
+    groupSessionIds?: string[]
+    mentionLimit?: number
+    privateLimit?: number
+    mentionMode?: 'text_at_me' | string
+  }) => {
+    return chatService.getMyFootprintStats(beginTimestamp, endTimestamp, options)
+  })
+
+  ipcMain.handle('chat:exportMyFootprint', async (_, beginTimestamp: number, endTimestamp: number, format: 'csv' | 'json', filePath: string) => {
+    return chatService.exportMyFootprint(beginTimestamp, endTimestamp, format, filePath)
+  })
+
   ipcMain.handle('sns:getTimeline', async (_, limit: number, offset: number, usernames?: string[], keyword?: string, startTime?: number, endTime?: number) => {
     return snsService.getTimeline(limit, offset, usernames, keyword, startTime, endTime)
   })

@@ -15,7 +15,6 @@ const isMac = navigator.userAgent.toLowerCase().includes('mac')
 const isLinux = navigator.userAgent.toLowerCase().includes('linux')
 const isWindows = !isMac && !isLinux
 
-const dbDirName = isMac ? '2.0b4.0.9 目录' : 'xwechat_files 目录'
 const DB_PATH_CHINESE_ERROR = '路径包含中文字符，迁移至全英文目录后再试'
 const dbPathPlaceholder = isMac
     ? '例如: ~/Library/Containers/com.tencent.xinWeChat/Data/Library/Application Support/com.tencent.xinWeChat/2.0b4.0.9'
@@ -25,7 +24,7 @@ const dbPathPlaceholder = isMac
 
 const steps = [
   { id: 'intro', title: '欢迎', desc: '准备开始你的本地数据探索' },
-  { id: 'db', title: '数据库目录', desc: `定位 ${dbDirName}` },
+  { id: 'db', title: '数据库目录', desc: `定位 xwechat_files 目录` },
   { id: 'cache', title: '缓存目录', desc: '设置本地缓存存储位置（可选）' },
   { id: 'key', title: '解密密钥', desc: '获取密钥与自动识别账号' },
   { id: 'image', title: '图片密钥', desc: '获取 XOR 与 AES 密钥' },

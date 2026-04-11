@@ -58,6 +58,7 @@ export class WcdbCore {
   private wcdbGetAnnualReportExtras: any = null
   private wcdbGetDualReportStats: any = null
   private wcdbGetGroupStats: any = null
+  private wcdbGetMyFootprintStats: any = null
   private wcdbGetMessageDates: any = null
   private wcdbOpenMessageCursor: any = null
   private wcdbOpenMessageCursorLite: any = null
@@ -127,6 +128,8 @@ export class WcdbCore {
   private logTimer: NodeJS.Timeout | null = null
   private lastLogTail: string | null = null
   private lastResolvedLogPath: string | null = null
+  private lastCursorForceReopenAt = 0
+  private readonly cursorForceReopenCooldownMs = 15000
 
   setPaths(resourcesPath: string, userDataPath: string): void {
     this.resourcesPath = resourcesPath
@@ -921,6 +924,13 @@ export class WcdbCore {
         this.wcdbGetGroupStats = this.lib.func('int32 wcdb_get_group_stats(int64 handle, const char* chatroomId, int32 begin, int32 end, _Out_ void** outJson)')
       } catch {
         this.wcdbGetGroupStats = null
+      }
+
+      // wcdb_status wcdb_get_my_footprint_stats(wcdb_handle handle, const char* options_json, char** out_json)
+      try {
+        this.wcdbGetMyFootprintStats = this.lib.func('int32 wcdb_get_my_footprint_stats(int64 handle, const char* optionsJson, _Out_ void** outJson)')
+      } catch {
+        this.wcdbGetMyFootprintStats = null
       }
 
       // wcdb_status wcdb_get_message_dates(wcdb_handle handle, const char* session_id, char** out_json)
@@ -3098,6 +3108,65 @@ export class WcdbCore {
     }
   }
 
+  async getMyFootprintStats(options: {
+    beginTimestamp?: number
+    endTimestamp?: number
+    myWxid?: string
+    privateSessionIds?: string[]
+    groupSessionIds?: string[]
+    mentionLimit?: number
+    privateLimit?: number
+    mentionMode?: 'text_at_me' | string
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    if (!this.ensureReady()) {
+      return { success: false, error: 'WCDB 未连接' }
+    }
+    if (!this.wcdbGetMyFootprintStats) {
+      return { success: false, error: '接口未就绪' }
+    }
+
+    try {
+      const normalizedPrivateSessions = Array.from(new Set(
+        (options?.privateSessionIds || [])
+          .map((value) => String(value || '').trim())
+          .filter(Boolean)
+      ))
+      const normalizedGroupSessions = Array.from(new Set(
+        (options?.groupSessionIds || [])
+          .map((value) => String(value || '').trim())
+          .filter(Boolean)
+      ))
+      const mentionLimitRaw = Number(options?.mentionLimit ?? 0)
+      const privateLimitRaw = Number(options?.privateLimit ?? 0)
+      const mentionLimit = Number.isFinite(mentionLimitRaw) && mentionLimitRaw >= 0 ? Math.floor(mentionLimitRaw) : 0
+      const privateLimit = Number.isFinite(privateLimitRaw) && privateLimitRaw >= 0 ? Math.floor(privateLimitRaw) : 0
+
+      const payload = JSON.stringify({
+        begin: this.normalizeTimestamp(options?.beginTimestamp || 0),
+        end: this.normalizeTimestamp(options?.endTimestamp || 0),
+        my_wxid: String(options?.myWxid || '').trim(),
+        private_session_ids: normalizedPrivateSessions,
+        group_session_ids: normalizedGroupSessions,
+        mention_limit: mentionLimit,
+        private_limit: privateLimit,
+        mention_mode: options?.mentionMode || 'text_at_me'
+      })
+
+      const outPtr = [null as any]
+      const result = this.wcdbGetMyFootprintStats(this.handle, payload, outPtr)
+      if (result !== 0 || !outPtr[0]) {
+        return { success: false, error: `获取我的足迹统计失败: ${result}` }
+      }
+      const jsonStr = this.decodeJsonPtr(outPtr[0])
+      if (!jsonStr) {
+        return { success: false, error: '解析我的足迹统计失败' }
+      }
+      return { success: true, data: JSON.parse(jsonStr) || {} }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
   /**
    * 强制重新打开账号连接（绕过路径缓存），用于微信重装后消息数据库刷新失败时的自动恢复。
    * 返回重新打开是否成功。
@@ -3119,6 +3188,15 @@ export class WcdbCore {
     return this.open(path, key, wxid)
   }
 
+  private shouldRetryCursorAfterNoDb(): boolean {
+    const now = Date.now()
+    if (now - this.lastCursorForceReopenAt < this.cursorForceReopenCooldownMs) {
+      return false
+    }
+    this.lastCursorForceReopenAt = now
+    return true
+  }
+
   async openMessageCursor(sessionId: string, batchSize: number, ascending: boolean, beginTimestamp: number, endTimestamp: number): Promise<{ success: boolean; cursor?: number; error?: string }> {
     if (!this.ensureReady()) {
       return { success: false, error: 'WCDB 未连接' }
@@ -3136,7 +3214,7 @@ export class WcdbCore {
       )
       // result=-3 表示 WCDB_STATUS_NO_MESSAGE_DB：消息数据库缓存为空（常见于微信重装后）
       // 自动强制重连并重试一次
-      if (result === -3 && outCursor[0] <= 0) {
+      if (result === -3 && outCursor[0] <= 0 && this.shouldRetryCursorAfterNoDb()) {
         this.writeLog('openMessageCursor: result=-3 (no message db), attempting forceReopen...', true)
         const reopened = await this.forceReopen()
         if (reopened && this.handle !== null) {
@@ -3156,11 +3234,13 @@ export class WcdbCore {
         }
       }
       if (result !== 0 || outCursor[0] <= 0) {
-        await this.printLogs(true)
-        this.writeLog(
-          `openMessageCursor failed: sessionId=${sessionId} batchSize=${batchSize} ascending=${ascending ? 1 : 0} begin=${beginTimestamp} end=${endTimestamp} result=${result} cursor=${outCursor[0]}`,
-          true
-        )
+        if (result !== -3) {
+          await this.printLogs(true)
+          this.writeLog(
+            `openMessageCursor failed: sessionId=${sessionId} batchSize=${batchSize} ascending=${ascending ? 1 : 0} begin=${beginTimestamp} end=${endTimestamp} result=${result} cursor=${outCursor[0]}`,
+            true
+          )
+        }
         const hint = result === -3
           ? `创建游标失败: ${result}（消息数据库未找到）。如果你最近重装过微信，请尝试重新指定数据目录后重试`
           : result === -7
@@ -3197,7 +3277,7 @@ export class WcdbCore {
 
       // result=-3 表示 WCDB_STATUS_NO_MESSAGE_DB：消息数据库缓存为空
       // 自动强制重连并重试一次
-      if (result === -3 && outCursor[0] <= 0) {
+      if (result === -3 && outCursor[0] <= 0 && this.shouldRetryCursorAfterNoDb()) {
         this.writeLog('openMessageCursorLite: result=-3 (no message db), attempting forceReopen...', true)
         const reopened = await this.forceReopen()
         if (reopened && this.handle !== null) {
@@ -3218,11 +3298,13 @@ export class WcdbCore {
       }
 
       if (result !== 0 || outCursor[0] <= 0) {
-        await this.printLogs(true)
-        this.writeLog(
-          `openMessageCursorLite failed: sessionId=${sessionId} batchSize=${batchSize} ascending=${ascending ? 1 : 0} begin=${beginTimestamp} end=${endTimestamp} result=${result} cursor=${outCursor[0]}`,
-          true
-        )
+        if (result !== -3) {
+          await this.printLogs(true)
+          this.writeLog(
+            `openMessageCursorLite failed: sessionId=${sessionId} batchSize=${batchSize} ascending=${ascending ? 1 : 0} begin=${beginTimestamp} end=${endTimestamp} result=${result} cursor=${outCursor[0]}`,
+            true
+          )
+        }
         if (result === -7) {
           return { success: false, error: 'message schema mismatch：当前账号消息表结构与程序要求不一致' }
         }

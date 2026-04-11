@@ -258,6 +258,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('chat:getMessage', sessionId, localId),
     searchMessages: (keyword: string, sessionId?: string, limit?: number, offset?: number, beginTimestamp?: number, endTimestamp?: number) =>
       ipcRenderer.invoke('chat:searchMessages', keyword, sessionId, limit, offset, beginTimestamp, endTimestamp),
+    getMyFootprintStats: (
+      beginTimestamp: number,
+      endTimestamp: number,
+      options?: {
+        myWxid?: string
+        privateSessionIds?: string[]
+        groupSessionIds?: string[]
+        mentionLimit?: number
+        privateLimit?: number
+        mentionMode?: 'text_at_me' | string
+      }
+    ) => ipcRenderer.invoke('chat:getMyFootprintStats', beginTimestamp, endTimestamp, options),
+    exportMyFootprint: (
+      beginTimestamp: number,
+      endTimestamp: number,
+      format: 'csv' | 'json',
+      filePath: string
+    ) => ipcRenderer.invoke('chat:exportMyFootprint', beginTimestamp, endTimestamp, format, filePath),
     onWcdbChange: (callback: (event: any, data: { type: string; json: string }) => void) => {
       ipcRenderer.on('wcdb-change', callback)
       return () => ipcRenderer.removeListener('wcdb-change', callback)

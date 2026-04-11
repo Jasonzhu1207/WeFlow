@@ -448,6 +448,19 @@ export class WcdbService {
     return this.callWorker('getGroupStats', { chatroomId, beginTimestamp, endTimestamp })
   }
 
+  async getMyFootprintStats(options: {
+    beginTimestamp?: number
+    endTimestamp?: number
+    myWxid?: string
+    privateSessionIds?: string[]
+    groupSessionIds?: string[]
+    mentionLimit?: number
+    privateLimit?: number
+    mentionMode?: 'text_at_me' | string
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.callWorker('getMyFootprintStats', { options })
+  }
+
   /**
    * 打开消息游标
    */

@@ -46,6 +46,12 @@ interface PendingInSessionSearchPayload {
   results: Message[]
 }
 
+interface PendingFootprintJumpPayload {
+  sessionId: string
+  localId: number
+  createTime: number
+}
+
 type GlobalMsgSearchPhase = 'idle' | 'seed' | 'backfill' | 'done'
 type GlobalMsgSearchResult = Message & { sessionId: string }
 
@@ -1363,6 +1369,7 @@ function ChatPage(props: ChatPageProps) {
   const [globalMsgAuthoritativeSessionCount, setGlobalMsgAuthoritativeSessionCount] = useState(0)
   const [globalMsgSearchError, setGlobalMsgSearchError] = useState<string | null>(null)
   const pendingInSessionSearchRef = useRef<PendingInSessionSearchPayload | null>(null)
+  const pendingFootprintJumpRef = useRef<PendingFootprintJumpPayload | null>(null)
   const pendingGlobalMsgSearchReplayRef = useRef<string | null>(null)
   const globalMsgPrefixCacheRef = useRef<GlobalMsgPrefixCacheEntry | null>(null)
 
@@ -5351,18 +5358,89 @@ function ChatPage(props: ChatPageProps) {
     selectSessionById
   ])
 
-  // 监听URL参数中的sessionId，用于通知点击导航
+  // 监听 URL 参数中的会话/锚点（通知跳转 + 足迹锚点定位）
   useEffect(() => {
     if (standaloneSessionWindow) return // standalone模式由上面的useEffect处理
     const params = new URLSearchParams(location.search)
-    const urlSessionId = params.get('sessionId')
+    const urlSessionId = String(params.get('sessionId') || '').trim()
     if (!urlSessionId) return
     if (!isConnected || isConnecting) return
-    if (currentSessionId === urlSessionId) return
-    selectSessionById(urlSessionId)
+    const jumpSource = String(params.get('jumpSource') || '').trim()
+    const jumpLocalId = Number.parseInt(String(params.get('jumpLocalId') || ''), 10)
+    const jumpCreateTime = Number.parseInt(String(params.get('jumpCreateTime') || ''), 10)
+    const hasFootprintAnchor = jumpSource === 'footprint'
+      && Number.isFinite(jumpLocalId)
+      && jumpLocalId > 0
+      && Number.isFinite(jumpCreateTime)
+      && jumpCreateTime > 0
+
+    if (hasFootprintAnchor) {
+      pendingFootprintJumpRef.current = {
+        sessionId: urlSessionId,
+        localId: jumpLocalId,
+        createTime: jumpCreateTime
+      }
+      if (currentSessionId !== urlSessionId) {
+        selectSessionById(urlSessionId)
+        return
+      }
+      const messageStub: Message = {
+        messageKey: `footprint:${urlSessionId}:${jumpCreateTime}:${jumpLocalId}`,
+        localId: jumpLocalId,
+        serverId: 0,
+        localType: 0,
+        createTime: jumpCreateTime,
+        sortSeq: jumpCreateTime,
+        isSend: null,
+        senderUsername: null,
+        parsedContent: '',
+        rawContent: ''
+      }
+      handleInSessionResultJump(messageStub)
+      pendingFootprintJumpRef.current = null
+      navigate('/chat', { replace: true })
+      return
+    }
+
+    pendingFootprintJumpRef.current = null
+    if (currentSessionId !== urlSessionId) {
+      selectSessionById(urlSessionId)
+    }
     // 选中后清除URL参数，避免影响后续用户手动切换会话
     navigate('/chat', { replace: true })
-  }, [standaloneSessionWindow, location.search, isConnected, isConnecting, currentSessionId, selectSessionById, navigate])
+  }, [
+    standaloneSessionWindow,
+    location.search,
+    isConnected,
+    isConnecting,
+    currentSessionId,
+    selectSessionById,
+    handleInSessionResultJump,
+    navigate
+  ])
+
+  useEffect(() => {
+    const pending = pendingFootprintJumpRef.current
+    if (!pending) return
+    if (!isConnected || isConnecting) return
+    if (currentSessionId !== pending.sessionId) return
+
+    const messageStub: Message = {
+      messageKey: `footprint:${pending.sessionId}:${pending.createTime}:${pending.localId}`,
+      localId: pending.localId,
+      serverId: 0,
+      localType: 0,
+      createTime: pending.createTime,
+      sortSeq: pending.createTime,
+      isSend: null,
+      senderUsername: null,
+      parsedContent: '',
+      rawContent: ''
+    }
+    handleInSessionResultJump(messageStub)
+    pendingFootprintJumpRef.current = null
+    navigate('/chat', { replace: true })
+  }, [isConnected, isConnecting, currentSessionId, handleInSessionResultJump, navigate])
 
   useEffect(() => {
     if (!standaloneSessionWindow || !normalizedInitialSessionId) return

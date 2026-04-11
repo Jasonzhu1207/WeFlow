@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed } from 'lucide-react'
+import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, RefreshCw, FolderClosed, Footprints } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import { useChatStore } from '../stores/chatStore'
 import { useAnalyticsStore } from '../stores/analyticsStore'
@@ -457,6 +457,16 @@ function Sidebar({ collapsed }: SidebarProps) {
           >
             <span className="nav-icon"><FileText size={20} /></span>
             <span className="nav-label">年度报告</span>
+          </NavLink>
+
+          {/* 我的足迹 */}
+          <NavLink
+            to="/footprint"
+            className={`nav-item ${isActive('/footprint') ? 'active' : ''}`}
+            title={collapsed ? '我的足迹' : undefined}
+          >
+            <span className="nav-icon"><Footprints size={20} /></span>
+            <span className="nav-label">我的足迹</span>
           </NavLink>
 
           {/* 导出 */}

@@ -407,6 +407,95 @@ export interface ElectronAPI {
     getVoiceTranscript: (sessionId: string, msgId: string, createTime?: number) => Promise<{ success: boolean; transcript?: string; error?: string }>
     onVoiceTranscriptPartial: (callback: (payload: { sessionId?: string; msgId: string; createTime?: number; text: string }) => void) => () => void
     getMessage: (sessionId: string, localId: number) => Promise<{ success: boolean; message?: Message; error?: string }>
+    getMyFootprintStats: (
+      beginTimestamp: number,
+      endTimestamp: number,
+      options?: {
+        myWxid?: string
+        privateSessionIds?: string[]
+        groupSessionIds?: string[]
+        mentionLimit?: number
+        privateLimit?: number
+        mentionMode?: 'text_at_me' | string
+      }
+    ) => Promise<{
+      success: boolean
+      data?: {
+        summary: {
+          private_inbound_people: number
+          private_replied_people: number
+          private_outbound_people: number
+          private_reply_rate: number
+          mention_count: number
+          mention_group_count: number
+        }
+        private_sessions: Array<{
+          session_id: string
+          incoming_count: number
+          outgoing_count: number
+          replied: boolean
+          first_incoming_ts: number
+          first_reply_ts: number
+          latest_ts: number
+          anchor_local_id: number
+          anchor_create_time: number
+          displayName?: string
+          avatarUrl?: string
+        }>
+        private_segments: Array<{
+          session_id: string
+          segment_index: number
+          start_ts: number
+          end_ts: number
+          duration_sec: number
+          incoming_count: number
+          outgoing_count: number
+          message_count: number
+          replied: boolean
+          first_incoming_ts: number
+          first_reply_ts: number
+          latest_ts: number
+          anchor_local_id: number
+          anchor_create_time: number
+          displayName?: string
+          avatarUrl?: string
+        }>
+        mentions: Array<{
+          session_id: string
+          local_id: number
+          create_time: number
+          sender_username: string
+          message_content: string
+          source: string
+          sessionDisplayName?: string
+          senderDisplayName?: string
+          senderAvatarUrl?: string
+        }>
+        mention_groups: Array<{
+          session_id: string
+          count: number
+          latest_ts: number
+          displayName?: string
+          avatarUrl?: string
+        }>
+        diagnostics: {
+          truncated: boolean
+          scanned_dbs: number
+          elapsed_ms: number
+        }
+      }
+      error?: string
+    }>
+    exportMyFootprint: (
+      beginTimestamp: number,
+      endTimestamp: number,
+      format: 'csv' | 'json',
+      filePath: string
+    ) => Promise<{
+      success: boolean
+      filePath?: string
+      error?: string
+    }>
     onWcdbChange: (callback: (event: any, data: { type: string; json: string }) => void) => () => void
   }
   biz: {

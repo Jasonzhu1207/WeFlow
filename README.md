@@ -96,22 +96,6 @@ npm install
 npm run dev
 ```
 
-## 构建状态
-
-用于开发者排查发布链路，普通用户可忽略：
-
-<p align="left">
-  <a href="https://github.com/hicccc77/WeFlow/actions/workflows/release.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/hicccc77/WeFlow/release.yml?branch=main&label=Release&style=flat&labelColor=111827&color=22C55E" alt="Release Workflow">
-  </a>
-  <a href="https://github.com/hicccc77/WeFlow/actions/workflows/preview-nightly-main.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/hicccc77/WeFlow/preview-nightly-main.yml?branch=main&label=Preview%20Nightly&style=flat&labelColor=111827&color=F59E0B" alt="Preview Nightly Workflow">
-  </a>
-  <a href="https://github.com/hicccc77/WeFlow/actions/workflows/dev-daily-fixed.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/hicccc77/WeFlow/dev-daily-fixed.yml?branch=dev&label=Dev%20Daily&style=flat&labelColor=111827&color=A78BFA" alt="Dev Daily Workflow">
-  </a>
-</p>
-
 ## 致谢
 
 - [密语 CipherTalk](https://github.com/ILoveBingLu/miyu) 为本项目提供了基础框架

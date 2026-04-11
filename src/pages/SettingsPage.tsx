@@ -245,11 +245,9 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const [weiboCookieDraft, setWeiboCookieDraft] = useState('')
   const [weiboCookieError, setWeiboCookieError] = useState('')
   const [isSavingWeiboCookie, setIsSavingWeiboCookie] = useState(false)
-  const [showWeiboBindingModal, setShowWeiboBindingModal] = useState(false)
-  const [weiboBindingDraftUid, setWeiboBindingDraftUid] = useState('')
-  const [weiboBindingError, setWeiboBindingError] = useState('')
-  const [isValidatingWeiboBinding, setIsValidatingWeiboBinding] = useState(false)
-  const [weiboBindingTarget, setWeiboBindingTarget] = useState<{ sessionId: string; displayName: string } | null>(null)
+  const [weiboBindingDrafts, setWeiboBindingDrafts] = useState<Record<string, string>>({})
+  const [weiboBindingErrors, setWeiboBindingErrors] = useState<Record<string, string>>({})
+  const [weiboBindingLoadingSessionId, setWeiboBindingLoadingSessionId] = useState<string | null>(null)
 
   // 检查 Hello 可用性
   useEffect(() => {
@@ -2564,32 +2562,48 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
     setWeiboCookieError('')
   }
 
-  const openWeiboBindingModal = (sessionId: string, displayName: string) => {
-    const existing = aiInsightWeiboBindings[sessionId]
-    setWeiboBindingTarget({ sessionId, displayName })
-    setWeiboBindingDraftUid(existing?.uid || '')
-    setWeiboBindingError('')
-    setShowWeiboBindingModal(true)
+  const getWeiboBindingDraftValue = (sessionId: string): string => {
+    const draft = weiboBindingDrafts[sessionId]
+    if (draft !== undefined) return draft
+    return aiInsightWeiboBindings[sessionId]?.uid || ''
   }
 
-  const handleSaveWeiboBinding = async () => {
-    if (!weiboBindingTarget) return
+  const updateWeiboBindingDraft = (sessionId: string, value: string) => {
+    setWeiboBindingDrafts((prev) => ({
+      ...prev,
+      [sessionId]: value
+    }))
+    setWeiboBindingErrors((prev) => {
+      if (!prev[sessionId]) return prev
+      const next = { ...prev }
+      delete next[sessionId]
+      return next
+    })
+  }
+
+  const handleSaveWeiboBinding = async (sessionId: string, displayName: string) => {
     if (!hasWeiboCookieConfigured) {
-      setWeiboBindingError('请先填写微博 Cookie，再进行 UID 绑定')
+      setWeiboBindingErrors((prev) => ({ ...prev, [sessionId]: '请先填写微博 Cookie，再进行 UID 绑定' }))
       return
     }
-    setIsValidatingWeiboBinding(true)
-    setWeiboBindingError('')
+    const draftUid = getWeiboBindingDraftValue(sessionId)
+    setWeiboBindingLoadingSessionId(sessionId)
+    setWeiboBindingErrors((prev) => {
+      if (!prev[sessionId]) return prev
+      const next = { ...prev }
+      delete next[sessionId]
+      return next
+    })
     try {
-      const result = await window.electronAPI.social.validateWeiboUid(weiboBindingDraftUid)
+      const result = await window.electronAPI.social.validateWeiboUid(draftUid)
       if (!result.success || !result.uid) {
-        setWeiboBindingError(result.error || '微博 UID 校验失败')
+        setWeiboBindingErrors((prev) => ({ ...prev, [sessionId]: result.error || '微博 UID 校验失败' }))
         return
       }
 
       const nextBindings: Record<string, configService.AiInsightWeiboBinding> = {
         ...aiInsightWeiboBindings,
-        [weiboBindingTarget.sessionId]: {
+        [sessionId]: {
           uid: result.uid,
           screenName: result.screenName,
           updatedAt: Date.now()
@@ -2597,15 +2611,12 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
       }
       setAiInsightWeiboBindings(nextBindings)
       await configService.setAiInsightWeiboBindings(nextBindings)
-      showMessage(`已为「${weiboBindingTarget.displayName}」绑定微博 UID`, true)
-      setShowWeiboBindingModal(false)
-      setWeiboBindingTarget(null)
-      setWeiboBindingDraftUid('')
-      setWeiboBindingError('')
+      setWeiboBindingDrafts((prev) => ({ ...prev, [sessionId]: result.uid! }))
+      showMessage(`已为「${displayName}」绑定微博 UID`, true)
     } catch (e: any) {
-      setWeiboBindingError(e?.message || String(e))
+      setWeiboBindingErrors((prev) => ({ ...prev, [sessionId]: e?.message || String(e) }))
     } finally {
-      setIsValidatingWeiboBinding(false)
+      setWeiboBindingLoadingSessionId(null)
     }
   }
 
@@ -2613,6 +2624,13 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
     const nextBindings = { ...aiInsightWeiboBindings }
     delete nextBindings[sessionId]
     setAiInsightWeiboBindings(nextBindings)
+    setWeiboBindingDrafts((prev) => ({ ...prev, [sessionId]: '' }))
+    setWeiboBindingErrors((prev) => {
+      if (!prev[sessionId]) return prev
+      const next = { ...prev }
+      delete next[sessionId]
+      return next
+    })
     await configService.setAiInsightWeiboBindings(nextBindings)
     if (!silent) showMessage('已清除微博绑定', true)
   }
@@ -3216,12 +3234,15 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
                 <>
                   <div className="anti-revoke-list-header">
                     <span>对话（{filteredSessions.length}）</span>
-                    <span className="insight-social-column-title">微博绑定</span>
+                    <span className="insight-social-column-title">社交平台（微博）</span>
                     <span>状态</span>
                   </div>
                   {filteredSessions.map((session) => {
                     const isSelected = aiInsightWhitelist.has(session.username)
                     const weiboBinding = aiInsightWeiboBindings[session.username]
+                    const weiboDraftValue = getWeiboBindingDraftValue(session.username)
+                    const isBindingLoading = weiboBindingLoadingSessionId === session.username
+                    const weiboBindingError = weiboBindingErrors[session.username]
                     return (
                       <div
                         key={session.username}
@@ -3256,21 +3277,24 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
                           </div>
                         </label>
                         <div className="insight-social-binding-cell">
-                          <div className="insight-social-binding-meta">
-                            <span className="binding-title">
-                              {weiboBinding ? `微博 UID ${weiboBinding.uid}` : '未绑定微博'}
-                            </span>
-                            <span className="binding-desc">
-                              {weiboBinding?.screenName ? `@${weiboBinding.screenName}` : '仅支持手动填写数字 UID'}
-                            </span>
+                          <div className="insight-social-binding-input-wrap">
+                            <span className="binding-platform-chip">微博</span>
+                            <input
+                              type="text"
+                              className="insight-social-binding-input"
+                              value={weiboDraftValue}
+                              placeholder="填写数字 UID"
+                              onChange={(e) => updateWeiboBindingDraft(session.username, e.target.value)}
+                            />
                           </div>
                           <div className="insight-social-binding-actions">
                             <button
                               type="button"
                               className="btn btn-secondary btn-sm"
-                              onClick={() => openWeiboBindingModal(session.username, session.displayName || session.username)}
+                              onClick={() => void handleSaveWeiboBinding(session.username, session.displayName || session.username)}
+                              disabled={isBindingLoading || !weiboDraftValue.trim()}
                             >
-                              {weiboBinding ? '编辑' : '绑定'}
+                              {isBindingLoading ? '绑定中...' : (weiboBinding ? '更新' : '绑定')}
                             </button>
                             {weiboBinding && (
                               <button
@@ -3280,6 +3304,15 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
                               >
                                 清除
                               </button>
+                            )}
+                          </div>
+                          <div className="insight-social-binding-feedback">
+                            {weiboBindingError ? (
+                              <span className="binding-feedback error">{weiboBindingError}</span>
+                            ) : weiboBinding?.screenName ? (
+                              <span className="binding-feedback">@{weiboBinding.screenName}</span>
+                            ) : (
+                              <span className="binding-feedback muted">仅支持手动填写数字 UID</span>
                             )}
                           </div>
                         </div>
@@ -4065,76 +4098,6 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
         </div>
       )}
 
-      {showWeiboBindingModal && weiboBindingTarget && (
-        <div
-          className="modal-overlay"
-          onClick={(e) => {
-            e.stopPropagation()
-            setShowWeiboBindingModal(false)
-            setWeiboBindingTarget(null)
-            setWeiboBindingDraftUid('')
-            setWeiboBindingError('')
-          }}
-        >
-          <div className="settings-inline-modal social-binding-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <Globe size={20} />
-              <h3>绑定微博 UID</h3>
-            </div>
-            <div className="modal-body">
-              <p className="warning-text">
-                当前联系人：<strong>{weiboBindingTarget.displayName}</strong>
-                <br />
-                仅支持手动填写数字 UID，例如 <code>1699432410</code>。保存前会使用当前微博 Cookie 做一次只读校验。
-              </p>
-              <input
-                type="text"
-                className="field-input"
-                value={weiboBindingDraftUid}
-                placeholder="输入微博 UID 或 /u/1699432410 链接"
-                onChange={(e) => {
-                  setWeiboBindingDraftUid(e.target.value)
-                  setWeiboBindingError('')
-                }}
-              />
-              {weiboBindingError && (
-                <div className="social-inline-error">{weiboBindingError}</div>
-              )}
-            </div>
-            <div className="modal-footer">
-              {aiInsightWeiboBindings[weiboBindingTarget.sessionId] && (
-                <button
-                  className="btn btn-secondary"
-                  onClick={async () => {
-                    await handleClearWeiboBinding(weiboBindingTarget.sessionId, true)
-                    setShowWeiboBindingModal(false)
-                    setWeiboBindingTarget(null)
-                    setWeiboBindingDraftUid('')
-                    setWeiboBindingError('')
-                    showMessage('已清除微博绑定', true)
-                  }}
-                >
-                  清除绑定
-                </button>
-              )}
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  setShowWeiboBindingModal(false)
-                  setWeiboBindingTarget(null)
-                  setWeiboBindingDraftUid('')
-                  setWeiboBindingError('')
-                }}
-              >
-                取消
-              </button>
-              <button className="btn btn-primary" onClick={() => { void handleSaveWeiboBinding() }} disabled={isValidatingWeiboBinding}>
-                {isValidatingWeiboBinding ? '校验中...' : '验证并保存'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

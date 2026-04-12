@@ -62,6 +62,11 @@ function normalizeText(value: unknown, fallback = ''): string {
   return text || fallback
 }
 
+function parseOptionalInt(value: unknown): number | undefined {
+  const n = Number(value)
+  return Number.isFinite(n) ? Math.floor(n) : undefined
+}
+
 function buildApiUrl(baseUrl: string, path: string): string {
   const base = baseUrl.replace(/\/+$/, '')
   const suffix = path.startsWith('/') ? path : `/${path}`
@@ -382,9 +387,9 @@ class AiAgentService {
     const rawContent = normalizeText(res?.choices?.[0]?.message?.content)
     const sql = extractSqlText(rawContent)
     const usage: TokenUsage = {
-      promptTokens: Number(res?.usage?.prompt_tokens || 0),
-      completionTokens: Number(res?.usage?.completion_tokens || 0),
-      totalTokens: Number(res?.usage?.total_tokens || 0)
+      promptTokens: parseOptionalInt(res?.usage?.prompt_tokens),
+      completionTokens: parseOptionalInt(res?.usage?.completion_tokens),
+      totalTokens: parseOptionalInt(res?.usage?.total_tokens)
     }
     if (!sql) {
       runtime.onChunk({
@@ -447,4 +452,3 @@ class AiAgentService {
 }
 
 export const aiAgentService = new AiAgentService()
-

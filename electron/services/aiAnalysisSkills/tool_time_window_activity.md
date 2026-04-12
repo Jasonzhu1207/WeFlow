@@ -1,9 +1,9 @@
-工具：ai_query_time_window_activity
+工具：get_time_stats
 
 何时用：
 - 用户提到“今天凌晨/昨晚/某个时间段”的聊天分析。
 
 Agent策略：
 - 第一步必须先扫时间窗活跃会话，不要直接下结论。
-- 拿到活跃会话后，再调用 ai_query_session_glimpse 逐个会话抽样阅读。
+- 拿到活跃会话后，再调用 get_recent_messages 逐个会话抽样阅读。
 - 若用户目标仍不清晰，先追问 1 个关键澄清问题再继续。

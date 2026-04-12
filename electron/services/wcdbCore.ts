@@ -62,6 +62,8 @@ export class WcdbCore {
   private wcdbGetMessageDates: any = null
   private wcdbOpenMessageCursor: any = null
   private wcdbOpenMessageCursorLite: any = null
+  private wcdbOpenMessageCursorWithKey: any = null
+  private wcdbOpenMessageCursorLiteWithKey: any = null
   private wcdbFetchMessageBatch: any = null
   private wcdbCloseMessageCursor: any = null
   private wcdbGetLogs: any = null
@@ -89,6 +91,15 @@ export class WcdbCore {
   private wcdbAiQueryTimeline: any = null
   private wcdbAiQueryTopicStats: any = null
   private wcdbAiQuerySourceRefs: any = null
+  private wcdbAiGetRecentMessages: any = null
+  private wcdbAiGetMessagesBefore: any = null
+  private wcdbAiGetMessagesAfter: any = null
+  private wcdbAiGetMessageContext: any = null
+  private wcdbAiGetSearchMessageContext: any = null
+  private wcdbAiGetConversationBetween: any = null
+  private wcdbAiSearchSessions: any = null
+  private wcdbAiGetSessionMessages: any = null
+  private wcdbAiGetSessionSummaries: any = null
   private wcdbGetSnsTimeline: any = null
   private wcdbGetSnsAnnualStats: any = null
   private wcdbGetSnsUsernames: any = null
@@ -947,11 +958,29 @@ export class WcdbCore {
       // wcdb_status wcdb_open_message_cursor(wcdb_handle handle, const char* session_id, int32_t batch_size, int32_t ascending, int32_t begin_timestamp, int32_t end_timestamp, wcdb_cursor* out_cursor)
       this.wcdbOpenMessageCursor = this.lib.func('int32 wcdb_open_message_cursor(int64 handle, const char* sessionId, int32 batchSize, int32 ascending, int32 beginTimestamp, int32 endTimestamp, _Out_ int64* outCursor)')
 
+      // wcdb_status wcdb_open_message_cursor_with_key(...)
+      try {
+        this.wcdbOpenMessageCursorWithKey = this.lib.func(
+          'int32 wcdb_open_message_cursor_with_key(int64 handle, const char* sessionId, int32 batchSize, int32 ascending, int32 beginTimestamp, int32 endTimestamp, int32 keyValid, int64 keySortSeq, int64 keyCreateTime, int64 keyLocalId, _Out_ int64* outCursor)'
+        )
+      } catch {
+        this.wcdbOpenMessageCursorWithKey = null
+      }
+
       // wcdb_status wcdb_open_message_cursor_lite(wcdb_handle handle, const char* session_id, int32_t batch_size, int32_t ascending, int32_t begin_timestamp, int32_t end_timestamp, wcdb_cursor* out_cursor)
       try {
         this.wcdbOpenMessageCursorLite = this.lib.func('int32 wcdb_open_message_cursor_lite(int64 handle, const char* sessionId, int32 batchSize, int32 ascending, int32 beginTimestamp, int32 endTimestamp, _Out_ int64* outCursor)')
       } catch {
         this.wcdbOpenMessageCursorLite = null
+      }
+
+      // wcdb_status wcdb_open_message_cursor_lite_with_key(...)
+      try {
+        this.wcdbOpenMessageCursorLiteWithKey = this.lib.func(
+          'int32 wcdb_open_message_cursor_lite_with_key(int64 handle, const char* sessionId, int32 batchSize, int32 ascending, int32 beginTimestamp, int32 endTimestamp, int32 keyValid, int64 keySortSeq, int64 keyCreateTime, int64 keyLocalId, _Out_ int64* outCursor)'
+        )
+      } catch {
+        this.wcdbOpenMessageCursorLiteWithKey = null
       }
 
       // wcdb_status wcdb_fetch_message_batch(wcdb_handle handle, wcdb_cursor cursor, char** out_json, int32_t* out_has_more)
@@ -1083,6 +1112,51 @@ export class WcdbCore {
         this.wcdbAiQuerySourceRefs = this.lib.func('int32 wcdb_ai_query_source_refs(int64 handle, const char* optionsJson, _Out_ void** outJson)')
       } catch {
         this.wcdbAiQuerySourceRefs = null
+      }
+      try {
+        this.wcdbAiGetRecentMessages = this.lib.func('int32 wcdb_ai_get_recent_messages(int64 handle, const char* optionsJson, _Out_ void** outJson)')
+      } catch {
+        this.wcdbAiGetRecentMessages = null
+      }
+      try {
+        this.wcdbAiGetMessagesBefore = this.lib.func('int32 wcdb_ai_get_messages_before(int64 handle, const char* optionsJson, _Out_ void** outJson)')
+      } catch {
+        this.wcdbAiGetMessagesBefore = null
+      }
+      try {
+        this.wcdbAiGetMessagesAfter = this.lib.func('int32 wcdb_ai_get_messages_after(int64 handle, const char* optionsJson, _Out_ void** outJson)')
+      } catch {
+        this.wcdbAiGetMessagesAfter = null
+      }
+      try {
+        this.wcdbAiGetMessageContext = this.lib.func('int32 wcdb_ai_get_message_context(int64 handle, const char* optionsJson, _Out_ void** outJson)')
+      } catch {
+        this.wcdbAiGetMessageContext = null
+      }
+      try {
+        this.wcdbAiGetSearchMessageContext = this.lib.func('int32 wcdb_ai_get_search_message_context(int64 handle, const char* optionsJson, _Out_ void** outJson)')
+      } catch {
+        this.wcdbAiGetSearchMessageContext = null
+      }
+      try {
+        this.wcdbAiGetConversationBetween = this.lib.func('int32 wcdb_ai_get_conversation_between(int64 handle, const char* optionsJson, _Out_ void** outJson)')
+      } catch {
+        this.wcdbAiGetConversationBetween = null
+      }
+      try {
+        this.wcdbAiSearchSessions = this.lib.func('int32 wcdb_ai_search_sessions(int64 handle, const char* optionsJson, _Out_ void** outJson)')
+      } catch {
+        this.wcdbAiSearchSessions = null
+      }
+      try {
+        this.wcdbAiGetSessionMessages = this.lib.func('int32 wcdb_ai_get_session_messages(int64 handle, const char* optionsJson, _Out_ void** outJson)')
+      } catch {
+        this.wcdbAiGetSessionMessages = null
+      }
+      try {
+        this.wcdbAiGetSessionSummaries = this.lib.func('int32 wcdb_ai_get_session_summaries(int64 handle, const char* optionsJson, _Out_ void** outJson)')
+      } catch {
+        this.wcdbAiGetSessionSummaries = null
       }
 
       // wcdb_status wcdb_get_sns_timeline(wcdb_handle handle, int32_t limit, int32_t offset, const char* username, const char* keyword, int32_t start_time, int32_t end_time, char** out_json)
@@ -3280,6 +3354,80 @@ export class WcdbCore {
     }
   }
 
+  async openMessageCursorWithKey(
+    sessionId: string,
+    batchSize: number,
+    ascending: boolean,
+    beginTimestamp: number,
+    endTimestamp: number,
+    key?: { sortSeq?: number; createTime?: number; localId?: number }
+  ): Promise<{ success: boolean; cursor?: number; error?: string }> {
+    if (!this.ensureReady()) {
+      return { success: false, error: 'WCDB 未连接' }
+    }
+    const keySortSeq = Number.isFinite(Number(key?.sortSeq)) ? Math.floor(Number(key?.sortSeq)) : 0
+    const keyCreateTime = Number.isFinite(Number(key?.createTime)) ? Math.floor(Number(key?.createTime)) : 0
+    const keyLocalId = Number.isFinite(Number(key?.localId)) ? Math.floor(Number(key?.localId)) : 0
+    const keyValid = keySortSeq > 0 || keyCreateTime > 0 || keyLocalId > 0
+
+    if (!keyValid || !this.wcdbOpenMessageCursorWithKey) {
+      return this.openMessageCursor(sessionId, batchSize, ascending, beginTimestamp, endTimestamp)
+    }
+
+    try {
+      const outCursor = [0]
+      let result = this.wcdbOpenMessageCursorWithKey(
+        this.handle,
+        sessionId,
+        batchSize,
+        ascending ? 1 : 0,
+        beginTimestamp,
+        endTimestamp,
+        1,
+        keySortSeq,
+        keyCreateTime,
+        keyLocalId,
+        outCursor
+      )
+      if (result === -3 && outCursor[0] <= 0 && this.shouldRetryCursorAfterNoDb()) {
+        this.writeLog('openMessageCursorWithKey: result=-3 (no message db), attempting forceReopen...', true)
+        const reopened = await this.forceReopen()
+        if (reopened && this.handle !== null) {
+          outCursor[0] = 0
+          result = this.wcdbOpenMessageCursorWithKey(
+            this.handle,
+            sessionId,
+            batchSize,
+            ascending ? 1 : 0,
+            beginTimestamp,
+            endTimestamp,
+            1,
+            keySortSeq,
+            keyCreateTime,
+            keyLocalId,
+            outCursor
+          )
+          this.writeLog(`openMessageCursorWithKey retry after forceReopen: result=${result} cursor=${outCursor[0]}`, true)
+        }
+      }
+      if (result !== 0 || outCursor[0] <= 0) {
+        if (result !== -3) {
+          await this.printLogs(true)
+          this.writeLog(
+            `openMessageCursorWithKey failed: sessionId=${sessionId} batchSize=${batchSize} ascending=${ascending ? 1 : 0} begin=${beginTimestamp} end=${endTimestamp} result=${result} cursor=${outCursor[0]}`,
+            true
+          )
+        }
+        return { success: false, error: `创建游标失败: ${result}` }
+      }
+      return { success: true, cursor: outCursor[0] }
+    } catch (e) {
+      await this.printLogs(true)
+      this.writeLog(`openMessageCursorWithKey exception: ${String(e)}`, true)
+      return { success: false, error: '创建游标异常，请查看日志' }
+    }
+  }
+
   async openMessageCursorLite(sessionId: string, batchSize: number, ascending: boolean, beginTimestamp: number, endTimestamp: number): Promise<{ success: boolean; cursor?: number; error?: string }> {
     if (!this.ensureReady()) {
       return { success: false, error: 'WCDB 未连接' }
@@ -3338,6 +3486,83 @@ export class WcdbCore {
     } catch (e) {
       await this.printLogs(true)
       this.writeLog(`openMessageCursorLite exception: ${String(e)}`, true)
+      return { success: false, error: '创建游标异常，请查看日志' }
+    }
+  }
+
+  async openMessageCursorLiteWithKey(
+    sessionId: string,
+    batchSize: number,
+    ascending: boolean,
+    beginTimestamp: number,
+    endTimestamp: number,
+    key?: { sortSeq?: number; createTime?: number; localId?: number }
+  ): Promise<{ success: boolean; cursor?: number; error?: string }> {
+    if (!this.ensureReady()) {
+      return { success: false, error: 'WCDB 未连接' }
+    }
+    const keySortSeq = Number.isFinite(Number(key?.sortSeq)) ? Math.floor(Number(key?.sortSeq)) : 0
+    const keyCreateTime = Number.isFinite(Number(key?.createTime)) ? Math.floor(Number(key?.createTime)) : 0
+    const keyLocalId = Number.isFinite(Number(key?.localId)) ? Math.floor(Number(key?.localId)) : 0
+    const keyValid = keySortSeq > 0 || keyCreateTime > 0 || keyLocalId > 0
+
+    if (!keyValid) {
+      return this.openMessageCursorLite(sessionId, batchSize, ascending, beginTimestamp, endTimestamp)
+    }
+    if (!this.wcdbOpenMessageCursorLiteWithKey) {
+      return this.openMessageCursorWithKey(sessionId, batchSize, ascending, beginTimestamp, endTimestamp, key)
+    }
+
+    try {
+      const outCursor = [0]
+      let result = this.wcdbOpenMessageCursorLiteWithKey(
+        this.handle,
+        sessionId,
+        batchSize,
+        ascending ? 1 : 0,
+        beginTimestamp,
+        endTimestamp,
+        1,
+        keySortSeq,
+        keyCreateTime,
+        keyLocalId,
+        outCursor
+      )
+      if (result === -3 && outCursor[0] <= 0 && this.shouldRetryCursorAfterNoDb()) {
+        this.writeLog('openMessageCursorLiteWithKey: result=-3 (no message db), attempting forceReopen...', true)
+        const reopened = await this.forceReopen()
+        if (reopened && this.handle !== null) {
+          outCursor[0] = 0
+          result = this.wcdbOpenMessageCursorLiteWithKey(
+            this.handle,
+            sessionId,
+            batchSize,
+            ascending ? 1 : 0,
+            beginTimestamp,
+            endTimestamp,
+            1,
+            keySortSeq,
+            keyCreateTime,
+            keyLocalId,
+            outCursor
+          )
+          this.writeLog(`openMessageCursorLiteWithKey retry after forceReopen: result=${result} cursor=${outCursor[0]}`, true)
+        }
+      }
+      if (result !== 0 || outCursor[0] <= 0) {
+        if (result !== -3) {
+          await this.printLogs(true)
+          this.writeLog(
+            `openMessageCursorLiteWithKey failed: sessionId=${sessionId} batchSize=${batchSize} ascending=${ascending ? 1 : 0} begin=${beginTimestamp} end=${endTimestamp} result=${result} cursor=${outCursor[0]}`,
+            true
+          )
+        }
+        return { success: false, error: `创建游标失败: ${result}` }
+      }
+      return { success: true, cursor: outCursor[0] }
+    } catch (e) {
+      await this.printLogs(true)
+      this.writeLog(`openMessageCursorLiteWithKey exception: ${String(e)}`, true)
       return { success: false, error: '创建游标异常，请查看日志' }
     }
   }
@@ -4298,6 +4523,243 @@ export class WcdbCore {
       if (result !== 0 || !outPtr[0]) return { success: false, error: `AI 来源引用查询失败: ${result}` }
       const jsonStr = this.decodeJsonPtr(outPtr[0])
       if (!jsonStr) return { success: false, error: '解析 AI 来源引用查询失败' }
+      const data = JSON.parse(jsonStr)
+      return { success: true, data }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
+  async aiGetRecentMessages(options: {
+    sessionId: string
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    if (!this.ensureReady()) return { success: false, error: 'WCDB 未连接' }
+    if (!this.wcdbAiGetRecentMessages) return { success: false, error: '当前数据服务版本不支持 AI 最近消息查询' }
+    try {
+      const outPtr = [null as any]
+      const result = this.wcdbAiGetRecentMessages(this.handle, JSON.stringify({
+        session_id: options.sessionId || '',
+        limit: options.limit || 120,
+        begin_timestamp: options.beginTimestamp || 0,
+        end_timestamp: options.endTimestamp || 0
+      }), outPtr)
+      if (result !== 0 || !outPtr[0]) return { success: false, error: `AI 最近消息查询失败: ${result}` }
+      const jsonStr = this.decodeJsonPtr(outPtr[0])
+      if (!jsonStr) return { success: false, error: '解析 AI 最近消息查询失败' }
+      return { success: true, rows: this.parseMessageJson(jsonStr) }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
+  async aiGetMessagesBefore(options: {
+    sessionId: string
+    beforeId?: number
+    beforeLocalId?: number
+    beforeCreateTime?: number
+    beforeSortSeq?: number
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    if (!this.ensureReady()) return { success: false, error: 'WCDB 未连接' }
+    if (!this.wcdbAiGetMessagesBefore) return { success: false, error: '当前数据服务版本不支持 AI 前向消息查询' }
+    try {
+      const outPtr = [null as any]
+      const result = this.wcdbAiGetMessagesBefore(this.handle, JSON.stringify({
+        session_id: options.sessionId || '',
+        before_id: options.beforeId || 0,
+        before_local_id: options.beforeLocalId || options.beforeId || 0,
+        before_create_time: options.beforeCreateTime || 0,
+        before_sort_seq: options.beforeSortSeq || 0,
+        limit: options.limit || 120,
+        begin_timestamp: options.beginTimestamp || 0,
+        end_timestamp: options.endTimestamp || 0
+      }), outPtr)
+      if (result !== 0 || !outPtr[0]) return { success: false, error: `AI 前向消息查询失败: ${result}` }
+      const jsonStr = this.decodeJsonPtr(outPtr[0])
+      if (!jsonStr) return { success: false, error: '解析 AI 前向消息查询失败' }
+      return { success: true, rows: this.parseMessageJson(jsonStr) }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
+  async aiGetMessagesAfter(options: {
+    sessionId: string
+    afterId?: number
+    afterLocalId?: number
+    afterCreateTime?: number
+    afterSortSeq?: number
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    if (!this.ensureReady()) return { success: false, error: 'WCDB 未连接' }
+    if (!this.wcdbAiGetMessagesAfter) return { success: false, error: '当前数据服务版本不支持 AI 后向消息查询' }
+    try {
+      const outPtr = [null as any]
+      const result = this.wcdbAiGetMessagesAfter(this.handle, JSON.stringify({
+        session_id: options.sessionId || '',
+        after_id: options.afterId || 0,
+        after_local_id: options.afterLocalId || options.afterId || 0,
+        after_create_time: options.afterCreateTime || 0,
+        after_sort_seq: options.afterSortSeq || 0,
+        limit: options.limit || 120,
+        begin_timestamp: options.beginTimestamp || 0,
+        end_timestamp: options.endTimestamp || 0
+      }), outPtr)
+      if (result !== 0 || !outPtr[0]) return { success: false, error: `AI 后向消息查询失败: ${result}` }
+      const jsonStr = this.decodeJsonPtr(outPtr[0])
+      if (!jsonStr) return { success: false, error: '解析 AI 后向消息查询失败' }
+      return { success: true, rows: this.parseMessageJson(jsonStr) }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
+  async aiGetMessageContext(options: {
+    sessionId: string
+    messageIds: number[]
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    if (!this.ensureReady()) return { success: false, error: 'WCDB 未连接' }
+    if (!this.wcdbAiGetMessageContext) return { success: false, error: '当前数据服务版本不支持 AI 消息上下文查询' }
+    try {
+      const outPtr = [null as any]
+      const result = this.wcdbAiGetMessageContext(this.handle, JSON.stringify({
+        session_id: options.sessionId || '',
+        message_ids: Array.isArray(options.messageIds) ? options.messageIds : []
+      }), outPtr)
+      if (result !== 0 || !outPtr[0]) return { success: false, error: `AI 消息上下文查询失败: ${result}` }
+      const jsonStr = this.decodeJsonPtr(outPtr[0])
+      if (!jsonStr) return { success: false, error: '解析 AI 消息上下文查询失败' }
+      return { success: true, rows: this.parseMessageJson(jsonStr) }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
+  async aiGetSearchMessageContext(options: {
+    sessionId: string
+    messageIds: number[]
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    if (!this.ensureReady()) return { success: false, error: 'WCDB 未连接' }
+    if (!this.wcdbAiGetSearchMessageContext) return { success: false, error: '当前数据服务版本不支持 AI 搜索上下文查询' }
+    try {
+      const outPtr = [null as any]
+      const result = this.wcdbAiGetSearchMessageContext(this.handle, JSON.stringify({
+        session_id: options.sessionId || '',
+        message_ids: Array.isArray(options.messageIds) ? options.messageIds : []
+      }), outPtr)
+      if (result !== 0 || !outPtr[0]) return { success: false, error: `AI 搜索上下文查询失败: ${result}` }
+      const jsonStr = this.decodeJsonPtr(outPtr[0])
+      if (!jsonStr) return { success: false, error: '解析 AI 搜索上下文查询失败' }
+      return { success: true, rows: this.parseMessageJson(jsonStr) }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
+  async aiGetConversationBetween(options: {
+    sessionId: string
+    memberId1?: number
+    memberId2?: number
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    if (!this.ensureReady()) return { success: false, error: 'WCDB 未连接' }
+    if (!this.wcdbAiGetConversationBetween) return { success: false, error: '当前数据服务版本不支持 AI 双人对话查询' }
+    try {
+      const outPtr = [null as any]
+      const result = this.wcdbAiGetConversationBetween(this.handle, JSON.stringify({
+        session_id: options.sessionId || '',
+        member_id1: options.memberId1 || 0,
+        member_id2: options.memberId2 || 0,
+        limit: options.limit || 120,
+        begin_timestamp: options.beginTimestamp || 0,
+        end_timestamp: options.endTimestamp || 0
+      }), outPtr)
+      if (result !== 0 || !outPtr[0]) return { success: false, error: `AI 双人对话查询失败: ${result}` }
+      const jsonStr = this.decodeJsonPtr(outPtr[0])
+      if (!jsonStr) return { success: false, error: '解析 AI 双人对话查询失败' }
+      return { success: true, rows: this.parseMessageJson(jsonStr) }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
+  async aiSearchSessions(options: {
+    keyword?: string
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    if (!this.ensureReady()) return { success: false, error: 'WCDB 未连接' }
+    if (!this.wcdbAiSearchSessions) return { success: false, error: '当前数据服务版本不支持 AI 会话搜索' }
+    try {
+      const outPtr = [null as any]
+      const result = this.wcdbAiSearchSessions(this.handle, JSON.stringify({
+        keyword: options.keyword || '',
+        limit: options.limit || 20,
+        begin_timestamp: options.beginTimestamp || 0,
+        end_timestamp: options.endTimestamp || 0
+      }), outPtr)
+      if (result !== 0 || !outPtr[0]) return { success: false, error: `AI 会话搜索失败: ${result}` }
+      const jsonStr = this.decodeJsonPtr(outPtr[0])
+      if (!jsonStr) return { success: false, error: '解析 AI 会话搜索失败' }
+      const rows = JSON.parse(jsonStr)
+      return { success: true, rows: Array.isArray(rows) ? rows : [] }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
+  async aiGetSessionMessages(options: {
+    sessionId: string
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    if (!this.ensureReady()) return { success: false, error: 'WCDB 未连接' }
+    if (!this.wcdbAiGetSessionMessages) return { success: false, error: '当前数据服务版本不支持 AI 会话消息查询' }
+    try {
+      const outPtr = [null as any]
+      const result = this.wcdbAiGetSessionMessages(this.handle, JSON.stringify({
+        session_id: options.sessionId || '',
+        limit: options.limit || 500,
+        begin_timestamp: options.beginTimestamp || 0,
+        end_timestamp: options.endTimestamp || 0
+      }), outPtr)
+      if (result !== 0 || !outPtr[0]) return { success: false, error: `AI 会话消息查询失败: ${result}` }
+      const jsonStr = this.decodeJsonPtr(outPtr[0])
+      if (!jsonStr) return { success: false, error: '解析 AI 会话消息查询失败' }
+      return { success: true, rows: this.parseMessageJson(jsonStr) }
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  }
+
+  async aiGetSessionSummaries(options: {
+    sessionIds?: string[]
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    if (!this.ensureReady()) return { success: false, error: 'WCDB 未连接' }
+    if (!this.wcdbAiGetSessionSummaries) return { success: false, error: '当前数据服务版本不支持 AI 会话摘要查询' }
+    try {
+      const outPtr = [null as any]
+      const result = this.wcdbAiGetSessionSummaries(this.handle, JSON.stringify({
+        session_ids_json: JSON.stringify(options.sessionIds || []),
+        begin_timestamp: options.beginTimestamp || 0,
+        end_timestamp: options.endTimestamp || 0
+      }), outPtr)
+      if (result !== 0 || !outPtr[0]) return { success: false, error: `AI 会话摘要查询失败: ${result}` }
+      const jsonStr = this.decodeJsonPtr(outPtr[0])
+      if (!jsonStr) return { success: false, error: '解析 AI 会话摘要查询失败' }
       const data = JSON.parse(jsonStr)
       return { success: true, data }
     } catch (e) {

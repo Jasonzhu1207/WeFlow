@@ -1,4 +1,4 @@
-工具：ai_query_session_candidates
+工具：search_sessions
 
 何时用：
 - 用户未明确具体会话，但给了关键词/关系词（如“老婆”“买车”）。

@@ -1192,6 +1192,223 @@ export interface ElectronAPI {
       markdown?: string
       error?: string
     }>
+    getMessageContext: (sessionId: string, messageIds: number | number[], contextSize?: number) => Promise<Array<{
+      id: number
+      localId: number
+      sessionId: string
+      senderName: string
+      senderPlatformId: string
+      senderUsername: string
+      content: string
+      timestamp: number
+      type: number
+      isSend: number | null
+      replyToMessageId: string | null
+      replyToContent: string | null
+      replyToSenderName: string | null
+    }>>
+    getSearchMessageContext: (sessionId: string, messageIds: number[], contextBefore?: number, contextAfter?: number) => Promise<Array<{
+      id: number
+      localId: number
+      sessionId: string
+      senderName: string
+      senderPlatformId: string
+      senderUsername: string
+      content: string
+      timestamp: number
+      type: number
+      isSend: number | null
+      replyToMessageId: string | null
+      replyToContent: string | null
+      replyToSenderName: string | null
+    }>>
+    getRecentMessages: (sessionId: string, filter?: { startTs?: number; endTs?: number }, limit?: number) => Promise<{
+      messages: Array<{
+        id: number
+        localId: number
+        sessionId: string
+        senderName: string
+        senderPlatformId: string
+        senderUsername: string
+        content: string
+        timestamp: number
+        type: number
+        isSend: number | null
+        replyToMessageId: string | null
+        replyToContent: string | null
+        replyToSenderName: string | null
+      }>
+      total: number
+    }>
+    getAllRecentMessages: (sessionId: string, filter?: { startTs?: number; endTs?: number }, limit?: number) => Promise<{
+      messages: Array<{
+        id: number
+        localId: number
+        sessionId: string
+        senderName: string
+        senderPlatformId: string
+        senderUsername: string
+        content: string
+        timestamp: number
+        type: number
+        isSend: number | null
+        replyToMessageId: string | null
+        replyToContent: string | null
+        replyToSenderName: string | null
+      }>
+      total: number
+    }>
+    getConversationBetween: (
+      sessionId: string,
+      memberId1: number,
+      memberId2: number,
+      filter?: { startTs?: number; endTs?: number },
+      limit?: number
+    ) => Promise<{
+      messages: Array<{
+        id: number
+        localId: number
+        sessionId: string
+        senderName: string
+        senderPlatformId: string
+        senderUsername: string
+        content: string
+        timestamp: number
+        type: number
+        isSend: number | null
+        replyToMessageId: string | null
+        replyToContent: string | null
+        replyToSenderName: string | null
+      }>
+      total: number
+      member1Name: string
+      member2Name: string
+    }>
+    getMessagesBefore: (
+      sessionId: string,
+      beforeId: number,
+      limit?: number,
+      filter?: { startTs?: number; endTs?: number },
+      senderId?: number,
+      keywords?: string[]
+    ) => Promise<{
+      messages: Array<{
+        id: number
+        localId: number
+        sessionId: string
+        senderName: string
+        senderPlatformId: string
+        senderUsername: string
+        content: string
+        timestamp: number
+        type: number
+        isSend: number | null
+        replyToMessageId: string | null
+        replyToContent: string | null
+        replyToSenderName: string | null
+      }>
+      hasMore: boolean
+    }>
+    getMessagesAfter: (
+      sessionId: string,
+      afterId: number,
+      limit?: number,
+      filter?: { startTs?: number; endTs?: number },
+      senderId?: number,
+      keywords?: string[]
+    ) => Promise<{
+      messages: Array<{
+        id: number
+        localId: number
+        sessionId: string
+        senderName: string
+        senderPlatformId: string
+        senderUsername: string
+        content: string
+        timestamp: number
+        type: number
+        isSend: number | null
+        replyToMessageId: string | null
+        replyToContent: string | null
+        replyToSenderName: string | null
+      }>
+      hasMore: boolean
+    }>
+    searchSessions: (
+      sessionId: string,
+      keywords?: string[],
+      timeFilter?: { startTs?: number; endTs?: number },
+      limit?: number,
+      previewCount?: number
+    ) => Promise<Array<{
+      id: string
+      startTs: number
+      endTs: number
+      messageCount: number
+      isComplete: boolean
+      previewMessages: Array<{
+        id: number
+        localId: number
+        sessionId: string
+        senderName: string
+        senderPlatformId: string
+        senderUsername: string
+        content: string
+        timestamp: number
+        type: number
+        isSend: number | null
+        replyToMessageId: string | null
+        replyToContent: string | null
+        replyToSenderName: string | null
+      }>
+    }>>
+    getSessionMessages: (sessionId: string, chatSessionId: string | number, limit?: number) => Promise<{
+      sessionId: string
+      startTs: number
+      endTs: number
+      messageCount: number
+      returnedCount: number
+      participants: string[]
+      messages: Array<{
+        id: number
+        localId: number
+        sessionId: string
+        senderName: string
+        senderPlatformId: string
+        senderUsername: string
+        content: string
+        timestamp: number
+        type: number
+        isSend: number | null
+        replyToMessageId: string | null
+        replyToContent: string | null
+        replyToSenderName: string | null
+      }>
+    } | null>
+    getSessionSummaries: (
+      sessionId: string,
+      options?: { sessionIds?: string[]; limit?: number; previewCount?: number }
+    ) => Promise<Array<{
+      sessionId: string
+      sessionName: string
+      messageCount: number
+      latestTs: number
+      previewMessages: Array<{
+        id: number
+        localId: number
+        sessionId: string
+        senderName: string
+        senderPlatformId: string
+        senderUsername: string
+        content: string
+        timestamp: number
+        type: number
+        isSend: number | null
+        replyToMessageId: string | null
+        replyToContent: string | null
+        replyToSenderName: string | null
+      }>
+    }>>
     getToolCatalog: () => Promise<Array<{
       name: string
       category: 'core' | 'analysis'
@@ -1214,9 +1431,15 @@ export interface ElectronAPI {
       activeSkillId?: string
       chatScope?: 'group' | 'private'
       sqlContext?: { schemaText?: string; targetHint?: string }
-    }) => Promise<{ success: boolean; runId: string }>
-    abort: (payload: { runId?: string; conversationId?: string }) => Promise<{ success: boolean }>
-    onStream: (callback: (payload: AgentStreamChunk) => void) => () => void
+    }, onChunk?: (payload: AgentStreamChunk) => void) => {
+      requestId: string
+      promise: Promise<{
+        success: boolean
+        result?: { success: boolean; runId?: string; conversationId?: string; error?: string; canceled?: boolean }
+        error?: string
+      }>
+    }
+    abort: (payload: string | { requestId?: string; runId?: string; conversationId?: string }) => Promise<{ success: boolean }>
   }
   assistantApi: {
     getAll: () => Promise<Array<{
@@ -1292,102 +1515,6 @@ export interface ElectronAPI {
     getConfig: () => Promise<{ success: boolean; config: { apiBaseUrl: string; apiKey: string; model: string } }>
     setConfig: (payload: { apiBaseUrl?: string; apiKey?: string; model?: string }) => Promise<{ success: boolean }>
     listModels: () => Promise<{ success: boolean; models: Array<{ id: string; label: string }> }>
-  }
-  aiAnalysis: {
-    listConversations: (payload?: { page?: number; pageSize?: number }) => Promise<{
-      success: boolean
-      conversations?: Array<{
-        conversationId: string
-        title: string
-        createdAt: number
-        updatedAt: number
-        lastMessageAt: number
-      }>
-      error?: string
-    }>
-    createConversation: (payload?: { title?: string }) => Promise<{
-      success: boolean
-      conversationId?: string
-      error?: string
-    }>
-    deleteConversation: (conversationId: string) => Promise<{ success: boolean; error?: string }>
-    listMessages: (payload: { conversationId: string; limit?: number }) => Promise<{
-      success: boolean
-      messages?: Array<{
-        messageId: string
-        conversationId: string
-        role: 'user' | 'assistant' | 'system' | 'tool' | string
-        content: string
-        intentType: string
-        components: any[]
-        toolTrace: any[]
-        usage: Record<string, unknown>
-        error: string
-        parentMessageId: string
-        createdAt: number
-      }>
-      error?: string
-    }>
-    sendMessage: (payload: {
-      conversationId: string
-      userInput: string
-      options?: {
-        parentMessageId?: string
-        persistUserMessage?: boolean
-        assistantId?: string
-        activeSkillId?: string
-        chatScope?: 'group' | 'private'
-      }
-    }) => Promise<{
-      success: boolean
-      result?: {
-        conversationId: string
-        messageId: string
-        assistantText: string
-        components: any[]
-        toolTrace: any[]
-        usage?: {
-          promptTokens?: number
-          completionTokens?: number
-          totalTokens?: number
-        }
-        error?: string
-        createdAt: number
-      }
-      error?: string
-    }>
-    retryMessage: (payload: { conversationId: string; userMessageId?: string }) => Promise<{
-      success: boolean
-      result?: {
-        conversationId: string
-        messageId: string
-        assistantText: string
-        components: any[]
-        toolTrace: any[]
-        usage?: {
-          promptTokens?: number
-          completionTokens?: number
-          totalTokens?: number
-        }
-        error?: string
-        createdAt: number
-      }
-      error?: string
-    }>
-    abortRun: (payload: { runId?: string; conversationId?: string }) => Promise<{ success: boolean }>
-    onRunEvent: (callback: (payload: {
-      runId: string
-      conversationId: string
-      stage: string
-      ts: number
-      message: string
-      intent?: string
-      round?: number
-      toolName?: string
-      status?: string
-      durationMs?: number
-      data?: Record<string, unknown>
-    }) => void) => () => void
   }
 }
 

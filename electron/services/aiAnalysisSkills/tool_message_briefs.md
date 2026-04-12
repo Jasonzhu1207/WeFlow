@@ -1,4 +1,4 @@
-工具：ai_fetch_message_briefs
+工具：get_message_context
 
 何时用：
 - 需要核对少量关键消息原文，避免全量展开。

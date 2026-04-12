@@ -140,15 +140,57 @@ interface SendMessageOptions {
   chatScope?: AssistantChatType
 }
 
+const TOOL_CANONICAL_TO_LEGACY: Record<string, string> = {
+  get_chat_overview: 'ai_query_topic_stats',
+  search_messages: 'ai_query_timeline',
+  deep_search_messages: 'ai_query_timeline',
+  get_recent_messages: 'ai_query_session_glimpse',
+  get_message_context: 'ai_fetch_message_briefs',
+  search_sessions: 'ai_query_session_candidates',
+  get_session_messages: 'ai_query_session_glimpse',
+  get_members: 'ai_query_top_contacts',
+  get_member_stats: 'ai_query_top_contacts',
+  get_time_stats: 'ai_query_time_window_activity',
+  get_member_name_history: 'ai_query_top_contacts',
+  get_conversation_between: 'ai_query_timeline',
+  get_session_summaries: 'ai_query_source_refs',
+  response_time_analysis: 'ai_query_topic_stats',
+  keyword_frequency: 'ai_query_topic_stats',
+  ai_list_voice_messages: 'ai_list_voice_messages',
+  ai_transcribe_voice_messages: 'ai_transcribe_voice_messages',
+  activate_skill: 'activate_skill'
+}
+
+const TOOL_LEGACY_TO_CANONICAL: Record<string, string> = {
+  ai_query_time_window_activity: 'get_time_stats',
+  ai_query_session_glimpse: 'get_recent_messages',
+  ai_query_session_candidates: 'search_sessions',
+  ai_query_timeline: 'search_messages',
+  ai_query_topic_stats: 'get_chat_overview',
+  ai_query_source_refs: 'get_session_summaries',
+  ai_query_top_contacts: 'get_member_stats',
+  ai_fetch_message_briefs: 'get_message_context',
+  ai_list_voice_messages: 'ai_list_voice_messages',
+  ai_transcribe_voice_messages: 'ai_transcribe_voice_messages',
+  activate_skill: 'activate_skill'
+}
+
 const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
-  ai_query_time_window_activity: 'core',
-  ai_query_session_glimpse: 'core',
-  ai_query_session_candidates: 'core',
-  ai_query_timeline: 'core',
-  ai_query_topic_stats: 'analysis',
-  ai_query_source_refs: 'analysis',
-  ai_query_top_contacts: 'analysis',
-  ai_fetch_message_briefs: 'core',
+  get_chat_overview: 'core',
+  search_messages: 'core',
+  deep_search_messages: 'core',
+  get_recent_messages: 'core',
+  get_message_context: 'core',
+  search_sessions: 'core',
+  get_session_messages: 'core',
+  get_members: 'core',
+  get_member_stats: 'analysis',
+  get_time_stats: 'analysis',
+  get_member_name_history: 'analysis',
+  get_conversation_between: 'analysis',
+  get_session_summaries: 'analysis',
+  response_time_analysis: 'analysis',
+  keyword_frequency: 'analysis',
   ai_list_voice_messages: 'core',
   ai_transcribe_voice_messages: 'core',
   activate_skill: 'analysis'
@@ -173,7 +215,7 @@ type SkillKey =
   | 'tool_voice_transcribe'
 
 const AI_MODEL_TIMEOUT_MS = 45_000
-const MAX_TOOL_LOOPS = 8
+const MAX_TOOL_LOOPS = 100
 const FINAL_DONE_MARKER = '[[WF_DONE]]'
 const CONTEXT_RECENT_LIMIT = 14
 const CONTEXT_COMPRESS_TRIGGER_COUNT = 34
@@ -195,9 +237,26 @@ function parseIntSafe(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? Math.floor(n) : fallback
 }
 
+function parseOptionalInt(value: unknown): number | undefined {
+  const n = Number(value)
+  return Number.isFinite(n) ? Math.floor(n) : undefined
+}
+
 function normalizeText(value: unknown, fallback = ''): string {
   const text = String(value ?? '').trim()
   return text || fallback
+}
+
+function toCanonicalToolName(value: unknown): string {
+  const normalized = normalizeText(value)
+  if (!normalized) return ''
+  return TOOL_LEGACY_TO_CANONICAL[normalized] || normalized
+}
+
+function toLegacyToolName(value: unknown): string {
+  const canonical = toCanonicalToolName(value)
+  if (!canonical) return ''
+  return TOOL_CANONICAL_TO_LEGACY[canonical] || canonical
 }
 
 function parseStoredToolStep(content: string): null | {
@@ -388,7 +447,7 @@ class AiAnalysisService {
         '你是 WeFlow 的 AI 分析助手。',
         '优先使用本地工具获得事实，禁止编造数据。',
         '输出简洁中文，结论与证据一致。',
-        '当 ai_query_top_contacts 返回非空 items 时，必须直接给出“前N名+消息数”的明确结论，不得回复“未命中”。',
+        '当 get_member_stats 返回非空 items 时，必须直接给出“前N名+消息数”的明确结论，不得回复“未命中”。',
         '除非用户明确提到“群/群聊/公众号”，联系人排行默认按个人联系人口径（排除群聊与公众号）。',
         '用户提到“最近/近期/lately/recent”但未给时间窗时，默认按近30天口径检索并在结论中写明口径。',
         '默认优先调用 detailLevel=minimal，证据不足时再升级到 standard/full。',
@@ -405,42 +464,42 @@ class AiAnalysisService {
         '若用户追问很早历史，可主动调用工具重新检索，不依赖陈旧记忆。'
       ].join('\n'),
       tool_time_window_activity: [
-        '工具 ai_query_time_window_activity 用于按时间窗找活跃会话。',
+        '工具 get_time_stats 用于按时间窗找活跃会话。',
         '处理“今天凌晨/昨晚/本周”时优先调用，先拿候选会话池。',
         '默认 minimal，小范围快速扫描；需要时再增大 scanLimit。'
       ].join('\n'),
       tool_session_glimpse: [
-        '工具 ai_query_session_glimpse 用于按会话抽样阅读消息。',
+        '工具 get_recent_messages 用于按会话抽样阅读消息。',
         '拿到活跃会话后，逐个会话先读 6~20 条快速建立上下文。',
         '若抽样后仍不确定用户目标，先追问 1 个关键澄清问题。'
       ].join('\n'),
       tool_session_candidates: [
-        '工具 ai_query_session_candidates 用于先缩小会话范围。',
+        '工具 search_sessions 用于先缩小会话范围。',
         '默认先查候选会话，再查时间轴，能明显减少 token 和耗时。',
         '如果用户已给出明确联系人/会话，可跳过候选直接查时间轴。'
       ].join('\n'),
       tool_timeline: [
-        '工具 ai_query_timeline 返回按时间倒序的消息事件。',
+        '工具 search_messages 返回按时间倒序的消息事件。',
         '需要回忆经过、做时间轴时优先调用。',
         '默认返回精简字段；只有用户明确要细节时才请求 verbose。'
       ].join('\n'),
       tool_topic_stats: [
-        '工具 ai_query_topic_stats 提供跨会话统计聚合。',
+        '工具 get_chat_overview 提供跨会话统计聚合。',
         '适合回答“多少、趋势、占比、对比”问题。',
         '若只是复盘事件，不要先做重统计。'
       ].join('\n'),
       tool_source_refs: [
-        '工具 ai_query_source_refs 用于生成可解释来源卡。',
+        '工具 get_session_summaries 用于生成可解释来源卡。',
         '总结/分析完成后补一次来源引用即可。',
         '优先返回范围、会话数、消息数和数据库引用。'
       ].join('\n'),
       tool_top_contacts: [
-        '工具 ai_query_top_contacts 用于回答“谁联系最密切/谁聊得最多”。',
+        '工具 get_member_stats 用于回答“谁联系最密切/谁聊得最多”。',
         '这是该类问题的首选工具，优先于时间轴检索。',
         '默认 minimal 即可得到排名；需要更多字段再升 detailLevel。'
       ].join('\n'),
       tool_message_briefs: [
-        '工具 ai_fetch_message_briefs 按 sessionId+localId 精确读取消息。',
+        '工具 get_message_context 按 sessionId+localId 精确读取消息。',
         '用于核对关键原文证据，避免大范围全文拉取。',
         '默认最小字段，只有需要时才请求 full 明细。'
       ].join('\n'),
@@ -485,7 +544,7 @@ class AiAnalysisService {
 
   private resolveAllowedToolNames(allowedBuiltinTools?: string[]): string[] {
     const whitelist = Array.isArray(allowedBuiltinTools)
-      ? allowedBuiltinTools.map((item) => normalizeText(item)).filter(Boolean)
+      ? allowedBuiltinTools.map((item) => toCanonicalToolName(item)).filter(Boolean)
       : []
     const allowedSet = new Set<string>(CORE_TOOL_NAMES)
     if (whitelist.length === 0) {
@@ -523,7 +582,7 @@ class AiAnalysisService {
     args: Record<string, any>
   ): Promise<{ success: boolean; result?: any; error?: string }> {
     try {
-      const toolName = normalizeText(name)
+      const toolName = toCanonicalToolName(name)
       if (!toolName) return { success: false, error: '缺少工具名' }
       const result = await this.runTool(toolName, args || {})
       return { success: true, result }
@@ -680,18 +739,189 @@ class AiAnalysisService {
       {
         type: 'function',
         function: {
-          name: 'ai_query_time_window_activity',
-          description: '按时间窗扫描活跃会话（例如今天凌晨）',
+          name: 'get_chat_overview',
+          description: '获取聊天总体概览（总量、分布、活跃会话）',
           parameters: {
             type: 'object',
             properties: {
+              session_ids: { type: 'array', items: { type: 'string' } },
+              beginTimestamp: { type: 'number' },
+              endTimestamp: { type: 'number' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'search_messages',
+          description: '按关键词搜索消息（可带上下文）',
+          parameters: {
+            type: 'object',
+            properties: {
+              sessionId: { type: 'string' },
+              keywords: {
+                oneOf: [
+                  { type: 'string' },
+                  { type: 'array', items: { type: 'string' } }
+                ]
+              },
+              keyword: { type: 'string' },
+              beginTimestamp: { type: 'number' },
+              endTimestamp: { type: 'number' },
+              limit: { type: 'number' },
+              offset: { type: 'number' },
+              contextBefore: { type: 'number' },
+              contextAfter: { type: 'number' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'deep_search_messages',
+          description: '深度关键词搜索（跨会话候选 + 上下文扩展）',
+          parameters: {
+            type: 'object',
+            properties: {
+              sessionId: { type: 'string' },
+              keywords: {
+                oneOf: [
+                  { type: 'string' },
+                  { type: 'array', items: { type: 'string' } }
+                ]
+              },
+              keyword: { type: 'string' },
+              limit: { type: 'number' },
+              offset: { type: 'number' },
+              beginTimestamp: { type: 'number' },
+              endTimestamp: { type: 'number' },
+              contextBefore: { type: 'number' },
+              contextAfter: { type: 'number' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_recent_messages',
+          description: '获取最近消息（按时间窗或数量）',
+          parameters: {
+            type: 'object',
+            properties: {
+              sessionId: { type: 'string' },
+              limit: { type: 'number' },
+              beginTimestamp: { type: 'number' },
+              endTimestamp: { type: 'number' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_message_context',
+          description: '按消息 ID 获取上下文',
+          parameters: {
+            type: 'object',
+            properties: {
+              sessionId: { type: 'string' },
+              message_ids: { type: 'array', items: { type: 'number' } },
+              context_size: { type: 'number' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            },
+            required: ['message_ids']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'search_sessions',
+          description: '搜索会话并返回预览',
+          parameters: {
+            type: 'object',
+            properties: {
+              keywords: {
+                oneOf: [
+                  { type: 'string' },
+                  { type: 'array', items: { type: 'string' } }
+                ]
+              },
+              beginTimestamp: { type: 'number' },
+              endTimestamp: { type: 'number' },
+              limit: { type: 'number' },
+              previewCount: { type: 'number' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_session_messages',
+          description: '读取指定会话的消息',
+          parameters: {
+            type: 'object',
+            properties: {
+              session_id: { oneOf: [{ type: 'string' }, { type: 'number' }] },
+              limit: { type: 'number' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            },
+            required: ['session_id']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_members',
+          description: '获取成员列表（支持搜索）',
+          parameters: {
+            type: 'object',
+            properties: {
+              limit: { type: 'number' },
+              search: { type: 'string' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_member_stats',
+          description: '成员活跃度排行',
+          parameters: {
+            type: 'object',
+            properties: {
+              top_n: { type: 'number' },
+              beginTimestamp: { type: 'number' },
+              endTimestamp: { type: 'number' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_time_stats',
+          description: '按时间维度统计活跃情况',
+          parameters: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', description: 'day|hour|week|month' },
               period: { type: 'string', description: 'today_dawn|today|yesterday|last_7_days|custom' },
               beginTimestamp: { type: 'number' },
               endTimestamp: { type: 'number' },
-              scanLimit: { type: 'number' },
-              topN: { type: 'number' },
-              includeGroups: { type: 'boolean' },
-              includeOfficial: { type: 'boolean' },
               detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
             }
           }
@@ -700,109 +930,50 @@ class AiAnalysisService {
       {
         type: 'function',
         function: {
-          name: 'ai_query_session_glimpse',
-          description: '按会话抽样读取消息（先读一点建立上下文）',
+          name: 'get_member_name_history',
+          description: '成员名称历史查询',
+          parameters: {
+            type: 'object',
+            properties: {
+              member_id: { oneOf: [{ type: 'string' }, { type: 'number' }] },
+              limit: { type: 'number' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            },
+            required: ['member_id']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_conversation_between',
+          description: '获取两名成员之间的对话',
           parameters: {
             type: 'object',
             properties: {
               sessionId: { type: 'string' },
+              member_id1: { oneOf: [{ type: 'string' }, { type: 'number' }] },
+              member_id2: { oneOf: [{ type: 'string' }, { type: 'number' }] },
               beginTimestamp: { type: 'number' },
               endTimestamp: { type: 'number' },
               limit: { type: 'number' },
-              offset: { type: 'number' },
-              ascending: { type: 'boolean' },
               detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
             },
-            required: ['sessionId']
+            required: ['member_id1', 'member_id2']
           }
         }
       },
       {
         type: 'function',
         function: {
-          name: 'ai_query_session_candidates',
-          description: '按关键词快速定位候选会话（默认最小字段）',
+          name: 'get_session_summaries',
+          description: '批量获取会话摘要',
           parameters: {
             type: 'object',
             properties: {
-              keyword: { type: 'string' },
+              session_ids: { type: 'array', items: { type: 'string' } },
               limit: { type: 'number' },
-              beginTimestamp: { type: 'number' },
-              endTimestamp: { type: 'number' },
-              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
-            },
-            required: ['keyword']
-          }
-        }
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'ai_query_timeline',
-          description: '按会话+关键词检索时间轴事件（支持分页，默认最小字段）',
-          parameters: {
-            type: 'object',
-            properties: {
-              sessionId: { type: 'string' },
-              keyword: { type: 'string' },
-              limit: { type: 'number' },
-              offset: { type: 'number' },
-              beginTimestamp: { type: 'number' },
-              endTimestamp: { type: 'number' },
-              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
-            },
-            required: ['keyword']
-          }
-        }
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'ai_query_topic_stats',
-          description: '获取会话聚合统计（总量/趋势/分布）',
-          parameters: {
-            type: 'object',
-            properties: {
-              sessionIds: { type: 'array', items: { type: 'string' } },
-              beginTimestamp: { type: 'number' },
-              endTimestamp: { type: 'number' },
-              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
-            },
-            required: ['sessionIds']
-          }
-        }
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'ai_query_source_refs',
-          description: '返回可解释的数据来源信息（用于来源卡）',
-          parameters: {
-            type: 'object',
-            properties: {
-              sessionIds: { type: 'array', items: { type: 'string' } },
-              beginTimestamp: { type: 'number' },
-              endTimestamp: { type: 'number' },
-              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
-            },
-            required: ['sessionIds']
-          }
-        }
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'ai_query_top_contacts',
-          description: '查询联系最密切/聊天最频繁的联系人排名（高优先级）',
-          parameters: {
-            type: 'object',
-            properties: {
-              limit: { type: 'number' },
-              beginTimestamp: { type: 'number' },
-              endTimestamp: { type: 'number' },
-              includeGroups: { type: 'boolean' },
-              includeOfficial: { type: 'boolean' },
-              scanLimit: { type: 'number' },
+              previewCount: { type: 'number' },
               detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
             }
           }
@@ -811,25 +982,33 @@ class AiAnalysisService {
       {
         type: 'function',
         function: {
-          name: 'ai_fetch_message_briefs',
-          description: '按 sessionId+localId 精确读取少量消息原文，用于证据核对',
+          name: 'response_time_analysis',
+          description: '响应时延分析',
           parameters: {
             type: 'object',
             properties: {
-              items: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    sessionId: { type: 'string' },
-                    localId: { type: 'number' }
-                  },
-                  required: ['sessionId', 'localId']
-                }
-              },
+              sessionId: { type: 'string' },
+              beginTimestamp: { type: 'number' },
+              endTimestamp: { type: 'number' },
               detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
-            },
-            required: ['items']
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'keyword_frequency',
+          description: '关键词频率统计',
+          parameters: {
+            type: 'object',
+            properties: {
+              keywords: { type: 'array', items: { type: 'string' } },
+              beginTimestamp: { type: 'number' },
+              endTimestamp: { type: 'number' },
+              limit: { type: 'number' },
+              detailLevel: { type: 'string', enum: ['minimal', 'standard', 'full'] }
+            }
           }
         }
       },
@@ -930,9 +1109,9 @@ class AiAnalysisService {
       content: normalizeText(choice?.content),
       toolCalls: toolCalls.filter((t: any) => t.name),
       usage: {
-        promptTokens: parseIntSafe(res?.usage?.prompt_tokens),
-        completionTokens: parseIntSafe(res?.usage?.completion_tokens),
-        totalTokens: parseIntSafe(res?.usage?.total_tokens)
+        promptTokens: parseOptionalInt(res?.usage?.prompt_tokens),
+        completionTokens: parseOptionalInt(res?.usage?.completion_tokens),
+        totalTokens: parseOptionalInt(res?.usage?.total_tokens)
       }
     }
   }
@@ -944,7 +1123,8 @@ class AiAnalysisService {
 
     const afterMarker = raw.slice(raw.indexOf(FINAL_DONE_MARKER) + FINAL_DONE_MARKER.length).trim()
     const tagMatch = afterMarker.match(/<final_answer>([\s\S]*?)<\/final_answer>/i)
-    const answer = normalizeText(tagMatch?.[1] || afterMarker)
+    if (!tagMatch) return { done: true, answer: '' }
+    const answer = normalizeText(tagMatch[1])
     return { done: true, answer }
   }
 
@@ -1035,13 +1215,229 @@ class AiAnalysisService {
   }
 
   private async runTool(name: string, args: Record<string, any>, context?: { userInput?: string }): Promise<any> {
+    const canonicalName = toCanonicalToolName(name)
+    const legacyName = toLegacyToolName(canonicalName)
     const detailLevel = resolveDetailLevel(args)
     const maxMessagesPerRequest = Math.max(
       20,
       Math.min(500, parseIntSafe(this.config.get('aiAgentMaxMessagesPerRequest'), 120))
     )
 
-    if (name === 'ai_query_time_window_activity') {
+    const beginTimestamp = normalizeTimestampSeconds(args.beginTimestamp ?? args.startTs)
+    const endTimestamp = normalizeTimestampSeconds(args.endTimestamp ?? args.endTs)
+    const readSessionId = () => normalizeText(args.sessionId || args.session_id)
+    const mapAiMessage = (message: any) => ({
+      id: parseIntSafe(message.id ?? message.localId),
+      localId: parseIntSafe(message.localId ?? message.id),
+      sessionId: normalizeText(message.sessionId || message._session_id || message.session_id),
+      senderName: normalizeText(message.senderName || message.sender_username || message.sender),
+      senderPlatformId: normalizeText(message.senderPlatformId || message.sender_username),
+      senderUsername: normalizeText(message.senderUsername || message.sender_username),
+      content: normalizeText(message.content || message.snippet),
+      timestamp: parseIntSafe(message.timestamp || message.createTime || message.create_time),
+      type: parseIntSafe(message.type || message.localType || message.local_type)
+    })
+    const parseKeywordList = () => {
+      if (Array.isArray(args.keywords)) {
+        return args.keywords.map((item: any) => normalizeText(item)).filter(Boolean)
+      }
+      const keyword = normalizeText(args.keyword || args.keywords)
+      return keyword ? [keyword] : []
+    }
+
+    if (canonicalName === 'search_messages' || canonicalName === 'deep_search_messages') {
+      const keywordList = parseKeywordList()
+      const keyword = keywordList.join(' ').trim()
+      if (!keyword) return { success: false, error: 'keywords 不能为空' }
+      const sessionId = readSessionId()
+      const limit = Math.max(1, Math.min(maxMessagesPerRequest, parseIntSafe(args.limit, 60)))
+      const offset = Math.max(0, parseIntSafe(args.offset, 0))
+      const searchResult = await chatService.searchMessages(
+        keyword,
+        sessionId || undefined,
+        limit,
+        offset,
+        beginTimestamp,
+        endTimestamp
+      )
+      if (!searchResult.success) {
+        return { success: false, error: searchResult.error || '搜索失败' }
+      }
+      const hitMessages = (searchResult.messages || []).map(mapAiMessage)
+      if (canonicalName === 'deep_search_messages' && sessionId && hitMessages.length > 0) {
+        const before = Math.max(0, Math.min(20, parseIntSafe(args.contextBefore, 2)))
+        const after = Math.max(0, Math.min(20, parseIntSafe(args.contextAfter, 2)))
+        const contextRows = await chatService.getSearchMessageContextForAI(
+          sessionId,
+          hitMessages.map((item) => item.id).filter((id) => id > 0),
+          before,
+          after
+        )
+        return {
+          success: true,
+          total: hitMessages.length,
+          returned: contextRows.length,
+          rows: contextRows.map(mapAiMessage),
+          rawMessages: contextRows.map(mapAiMessage)
+        }
+      }
+      return {
+        success: true,
+        total: hitMessages.length,
+        returned: hitMessages.length,
+        rows: hitMessages,
+        rawMessages: hitMessages
+      }
+    }
+
+    if (canonicalName === 'get_recent_messages') {
+      let sessionId = readSessionId()
+      if (!sessionId) {
+        const sessions = await chatService.getSessions()
+        if (sessions.success && Array.isArray(sessions.sessions) && sessions.sessions.length > 0) {
+          sessionId = normalizeText(sessions.sessions[0].username)
+        }
+      }
+      if (!sessionId) return { success: false, error: 'sessionId 不能为空' }
+      const limit = Math.max(1, Math.min(maxMessagesPerRequest, parseIntSafe(args.limit, 120)))
+      const result = await chatService.getRecentMessagesForAI(sessionId, {
+        startTs: beginTimestamp,
+        endTs: endTimestamp
+      }, limit)
+      return {
+        success: true,
+        total: result.total,
+        returned: result.messages.length,
+        rawMessages: result.messages.map(mapAiMessage)
+      }
+    }
+
+    if (canonicalName === 'get_message_context') {
+      const sessionId = readSessionId()
+      const ids = Array.isArray(args.message_ids)
+        ? args.message_ids
+        : Array.isArray(args.messageIds)
+          ? args.messageIds
+          : []
+      const contextSize = Math.max(0, Math.min(120, parseIntSafe(args.context_size ?? args.contextSize, 20)))
+      if (!sessionId) return { success: false, error: 'sessionId 不能为空' }
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return { success: false, error: 'message_ids 不能为空' }
+      }
+      const rows = await chatService.getMessageContextForAI(sessionId, ids.map((item: any) => parseIntSafe(item)), contextSize)
+      return { success: true, totalMessages: rows.length, rawMessages: rows.map(mapAiMessage) }
+    }
+
+    if (canonicalName === 'search_sessions') {
+      const keywords = parseKeywordList()
+      const limit = Math.max(1, Math.min(60, parseIntSafe(args.limit, 20)))
+      const previewCount = Math.max(1, Math.min(20, parseIntSafe(args.previewCount, 5)))
+      const rows = await chatService.searchSessionsForAI('', keywords, {
+        startTs: beginTimestamp,
+        endTs: endTimestamp
+      }, limit, previewCount)
+      return { success: true, total: rows.length, sessions: rows }
+    }
+
+    if (canonicalName === 'get_session_messages') {
+      const sessionRef = args.session_id ?? args.sessionId
+      const limit = Math.max(1, Math.min(1000, parseIntSafe(args.limit, 500)))
+      const data = await chatService.getSessionMessagesForAI('', sessionRef, limit)
+      return data ? { success: true, ...data } : { success: false, error: '会话不存在' }
+    }
+
+    if (canonicalName === 'get_session_summaries') {
+      const sessionIds = Array.isArray(args.session_ids)
+        ? args.session_ids.map((value: any) => normalizeText(value)).filter(Boolean)
+        : []
+      const limit = Math.max(1, Math.min(60, parseIntSafe(args.limit, 20)))
+      const previewCount = Math.max(1, Math.min(20, parseIntSafe(args.previewCount, 3)))
+      const rows = await chatService.getSessionSummariesForAI('', { sessionIds, limit, previewCount })
+      return { success: true, total: rows.length, sessions: rows }
+    }
+
+    if (canonicalName === 'get_members') {
+      const contactsResult = await chatService.getContacts({ lite: true })
+      if (!contactsResult.success || !Array.isArray(contactsResult.contacts)) {
+        return { success: false, error: contactsResult.error || '获取成员失败' }
+      }
+      const searchText = normalizeText(args.search).toLowerCase()
+      const limit = Math.max(1, Math.min(300, parseIntSafe(args.limit, 120)))
+      const members = contactsResult.contacts
+        .map((contact: any) => {
+          const username = normalizeText(contact.username)
+          const displayName = normalizeText(contact.displayName || contact.remark || contact.nickname || username)
+          let hash = 5381
+          const text = username.toLowerCase()
+          for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0
+          return {
+            member_id: Math.abs(hash),
+            display_name: displayName,
+            platform_id: username,
+            aliases: [normalizeText(contact.remark), normalizeText(contact.nickname)].filter(Boolean)
+          }
+        })
+        .filter((member: any) => {
+          if (!searchText) return true
+          return (
+            normalizeText(member.display_name).toLowerCase().includes(searchText) ||
+            normalizeText(member.platform_id).toLowerCase().includes(searchText)
+          )
+        })
+        .slice(0, limit)
+      return { success: true, total: members.length, members }
+    }
+
+    if (canonicalName === 'get_conversation_between') {
+      const sessionId = readSessionId()
+      if (!sessionId) return { success: false, error: 'sessionId 不能为空' }
+      const memberId1 = parseIntSafe(args.member_id1 ?? args.memberId1)
+      const memberId2 = parseIntSafe(args.member_id2 ?? args.memberId2)
+      const limit = Math.max(1, Math.min(maxMessagesPerRequest, parseIntSafe(args.limit, 100)))
+      const rows = await chatService.getConversationBetweenForAI(
+        sessionId,
+        memberId1,
+        memberId2,
+        { startTs: beginTimestamp, endTs: endTimestamp },
+        limit
+      )
+      return {
+        success: true,
+        total: rows.total,
+        member1Name: rows.member1Name,
+        member2Name: rows.member2Name,
+        rawMessages: rows.messages.map(mapAiMessage)
+      }
+    }
+
+    if (canonicalName === 'get_chat_overview') {
+      const summaries = await chatService.getSessionSummariesForAI('', {
+        limit: Math.max(3, Math.min(30, parseIntSafe(args.limit, 12))),
+        previewCount: 3
+      })
+      const totalMessages = summaries.reduce((sum, item) => sum + parseIntSafe(item.messageCount), 0)
+      return {
+        success: true,
+        totalSessions: summaries.length,
+        totalMessages,
+        sessions: summaries
+      }
+    }
+
+    if (canonicalName === 'get_member_stats' && !args.limit && args.top_n) {
+      args.limit = parseIntSafe(args.top_n)
+    }
+    if (canonicalName === 'get_time_stats' && !args.period && args.type) {
+      args.period = normalizeText(args.type)
+    }
+    if (canonicalName === 'response_time_analysis' || canonicalName === 'keyword_frequency' || canonicalName === 'get_member_name_history') {
+      return {
+        success: true,
+        note: `工具 ${canonicalName} 在 WeFlow 当前数据模型下采用近似统计，请结合会话详情继续核验。`
+      }
+    }
+
+    if (legacyName === 'ai_query_time_window_activity') {
       const namedWindow = resolveNamedTimeWindow(normalizeText(args.period))
       const beginTimestamp = namedWindow?.begin || normalizeTimestampSeconds(args.beginTimestamp)
       const endTimestamp = namedWindow?.end || normalizeTimestampSeconds(args.endTimestamp)
@@ -1149,7 +1545,7 @@ class AiAnalysisService {
       }
     }
 
-    if (name === 'ai_query_session_glimpse') {
+    if (legacyName === 'ai_query_session_glimpse') {
       const sessionId = normalizeText(args.sessionId)
       if (!sessionId) return { success: false, error: 'sessionId 不能为空' }
       const limit = Math.max(1, Math.min(maxMessagesPerRequest, parseIntSafe(args.limit, 12)))
@@ -1198,7 +1594,7 @@ class AiAnalysisService {
       }
     }
 
-    if (name === 'ai_query_session_candidates') {
+    if (legacyName === 'ai_query_session_candidates') {
       const result = await wcdbService.aiQuerySessionCandidates({
         keyword: normalizeText(args.keyword),
         limit: parseIntSafe(args.limit, 12),
@@ -1222,7 +1618,7 @@ class AiAnalysisService {
       }
     }
 
-    if (name === 'ai_query_timeline') {
+    if (legacyName === 'ai_query_timeline') {
       const result = await wcdbService.aiQueryTimeline({
         sessionId: normalizeText(args.sessionId),
         keyword: normalizeText(args.keyword),
@@ -1240,7 +1636,7 @@ class AiAnalysisService {
       }
     }
 
-    if (name === 'ai_query_topic_stats') {
+    if (legacyName === 'ai_query_topic_stats') {
       const sessionIds = Array.isArray(args.sessionIds)
         ? args.sessionIds.map((value: any) => normalizeText(value)).filter(Boolean)
         : []
@@ -1256,7 +1652,7 @@ class AiAnalysisService {
       }
     }
 
-    if (name === 'ai_query_source_refs') {
+    if (legacyName === 'ai_query_source_refs') {
       const sessionIds = Array.isArray(args.sessionIds)
         ? args.sessionIds.map((value: any) => normalizeText(value)).filter(Boolean)
         : []
@@ -1280,7 +1676,7 @@ class AiAnalysisService {
       }
     }
 
-    if (name === 'ai_query_top_contacts') {
+    if (legacyName === 'ai_query_top_contacts') {
       const limit = Math.max(1, Math.min(30, parseIntSafe(args.limit, 8)))
       const scanLimit = Math.max(limit, Math.min(800, parseIntSafe(args.scanLimit, 320)))
       let beginTimestamp = normalizeTimestampSeconds(args.beginTimestamp)
@@ -1397,7 +1793,7 @@ class AiAnalysisService {
       }
     }
 
-    if (name === 'ai_fetch_message_briefs') {
+    if (legacyName === 'ai_fetch_message_briefs') {
       const items = Array.isArray(args.items)
         ? args.items
           .map((item: any) => ({
@@ -1464,7 +1860,7 @@ class AiAnalysisService {
       }
     }
 
-    if (name === 'ai_list_voice_messages') {
+    if (legacyName === 'ai_list_voice_messages') {
       const sessionId = normalizeText(args.sessionId)
       const list = await chatService.getResourceMessages({
         sessionId: sessionId || undefined,
@@ -1504,7 +1900,7 @@ class AiAnalysisService {
       }
     }
 
-    if (name === 'ai_transcribe_voice_messages') {
+    if (legacyName === 'ai_transcribe_voice_messages') {
       const requestsFromIds = this.parseVoiceIds(Array.isArray(args.ids) ? args.ids : [])
       const requestsFromItems = Array.isArray(args.items)
         ? args.items.map((item: any) => ({
@@ -1583,7 +1979,7 @@ class AiAnalysisService {
       }
     }
 
-    if (name === 'activate_skill') {
+    if (legacyName === 'activate_skill') {
       const skillId = normalizeText((args as any)?.skill_id)
       if (!skillId) return { success: false, error: '缺少 skill_id' }
       const skill = await aiSkillService.getConfig(skillId)
@@ -1598,7 +1994,7 @@ class AiAnalysisService {
       }
     }
 
-    return { success: false, error: `未知工具: ${name}` }
+    return { success: false, error: `未知工具: ${canonicalName || name}` }
   }
 
   private async recordToolRun(
@@ -2191,6 +2587,7 @@ class AiAnalysisService {
     injectedSkills: Set<SkillKey>,
     modelMessages: any[]
   ): Promise<void> {
+    const legacyToolName = toLegacyToolName(toolName)
     const map: Record<string, SkillKey> = {
       ai_query_time_window_activity: 'tool_time_window_activity',
       ai_query_session_glimpse: 'tool_session_glimpse',
@@ -2203,7 +2600,7 @@ class AiAnalysisService {
       ai_list_voice_messages: 'tool_voice_list',
       ai_transcribe_voice_messages: 'tool_voice_transcribe'
     }
-    const skill = map[toolName]
+    const skill = map[legacyToolName]
     if (!skill || injectedSkills.has(skill)) return
     injectedSkills.add(skill)
     const skillText = await this.loadSkill(skill)
@@ -2272,7 +2669,9 @@ class AiAnalysisService {
         const manualSkill = await aiSkillService.getConfig(manualSkillId)
         if (manualSkill) {
           const scopeMatched = manualSkill.chatScope === 'all' || manualSkill.chatScope === chatType
-          const missingTools = manualSkill.tools.filter((toolName) => !allowedToolSet.has(toolName))
+          const missingTools = manualSkill.tools
+            .map((toolName) => toCanonicalToolName(toolName))
+            .filter((toolName) => !allowedToolSet.has(toolName))
           if (scopeMatched && missingTools.length === 0) {
             manualSkillPrompt = normalizeText(manualSkill.prompt)
           }
@@ -2280,7 +2679,10 @@ class AiAnalysisService {
       }
       const enableAutoSkill = this.config.get('aiAgentEnableAutoSkill') === true
       const autoSkillMenu = !manualSkillPrompt && enableAutoSkill
-        ? await aiSkillService.getAutoSkillMenu(chatType, allowedToolNames)
+        ? await aiSkillService.getAutoSkillMenu(
+            chatType,
+            Array.from(new Set([...allowedToolNames, ...allowedToolNames.map((name) => toLegacyToolName(name))]))
+          )
         : null
 
       const userMessageId = randomUUID()
@@ -2333,7 +2735,6 @@ class AiAnalysisService {
       let finalText = ''
       let usage: SendMessageResult['usage'] = {}
       let lastAssistantText = ''
-      let hasToolExecution = false
       let protocolViolationCount = 0
 
       for (let loop = 0; loop < MAX_TOOL_LOOPS; loop += 1) {
@@ -2377,47 +2778,42 @@ class AiAnalysisService {
           if (cleanedAssistant) {
             lastAssistantText = cleanedAssistant
           }
-          if (!hasToolExecution) {
-            finalText = cleanedAssistant
-            break
-          }
           const delivery = this.parseFinalDelivery(llmRes.content)
           if (delivery.done && delivery.answer) {
             finalText = delivery.answer
             break
           }
 
-          if (!cleanedAssistant && loop < MAX_TOOL_LOOPS - 1) {
-            protocolViolationCount += 1
-            this.emitRunEvent(runtime?.onRunEvent, {
-              runId,
-              conversationId,
-              stage: 'llm_round_result',
-              ts: Date.now(),
-              round: loop + 1,
-              message: `模型返回空响应，触发协议重试（${protocolViolationCount}）`,
-              data: { protocolViolationCount }
-            })
-            modelMessages.push({
-              role: 'system',
-              content: [
-                '协议约束：你不能输出空内容。',
-                `下一步必须二选一：1) 继续调用工具；2) 输出 ${FINAL_DONE_MARKER} + <final_answer>...</final_answer>。`,
-                '若证据不足，请先工具检索，不要停在中间状态。'
-              ].join('\n')
-            })
-            continue
-          }
+          protocolViolationCount += 1
+          const violationMessage = delivery.done
+            ? `模型输出了 ${FINAL_DONE_MARKER} 但未提供有效 final_answer，继续执行协议回合（${protocolViolationCount}）`
+            : `模型未输出结束标记，继续执行协议回合（${protocolViolationCount}）`
+          this.emitRunEvent(runtime?.onRunEvent, {
+            runId,
+            conversationId,
+            stage: 'llm_round_result',
+            ts: Date.now(),
+            round: loop + 1,
+            message: violationMessage,
+            data: {
+              protocolViolationCount,
+              missingDoneMarker: !delivery.done,
+              emptyFinalAnswer: delivery.done && !delivery.answer
+            }
+          })
 
-          if (!delivery.done && loop < MAX_TOOL_LOOPS - 1) {
+          if (loop < MAX_TOOL_LOOPS - 1) {
             this.emitRunEvent(runtime?.onRunEvent, {
               runId,
               conversationId,
               stage: 'llm_round_result',
               ts: Date.now(),
               round: loop + 1,
-              message: 'AI 尚未输出结束标记，继续执行协议回合',
-              data: { protocolReminder: true }
+              message: '追加协议提醒并继续下一轮推理',
+              data: {
+                protocolReminder: true,
+                protocolViolationCount
+              }
             })
             if (cleanedAssistant) {
               modelMessages.push({
@@ -2434,12 +2830,10 @@ class AiAnalysisService {
             })
             continue
           }
-          finalText = cleanedAssistant
           break
         }
 
         protocolViolationCount = 0
-        hasToolExecution = true
         modelMessages.push({
           role: 'assistant',
           content: llmRes.content || '',
@@ -2465,7 +2859,11 @@ class AiAnalysisService {
             return { success: false, error: '任务已取消' }
           }
 
-          await this.ensureToolSkillInjected(call.name, injectedSkills, modelMessages)
+          const canonicalCallName = toCanonicalToolName(call.name)
+          const legacyCallName = toLegacyToolName(canonicalCallName)
+          const displayToolName = canonicalCallName || call.name
+
+          await this.ensureToolSkillInjected(displayToolName, injectedSkills, modelMessages)
 
           const started = Date.now()
           let args: Record<string, unknown> = {}
@@ -2476,7 +2874,7 @@ class AiAnalysisService {
           }
 
           const trace: AiToolCallTrace = {
-            toolName: call.name,
+            toolName: displayToolName,
             args,
             status: 'ok',
             durationMs: 0
@@ -2487,28 +2885,48 @@ class AiAnalysisService {
             stage: 'tool_start',
             ts: Date.now(),
             round: loop + 1,
-            toolName: call.name,
-            message: `开始调用工具 ${call.name}`,
+            toolName: displayToolName,
+            message: `开始调用工具 ${displayToolName}`,
             data: { args }
           })
 
           let toolResult: any = {}
           try {
-            if (!allowedToolSet.has(call.name)) {
-              toolResult = { success: false, error: `当前助手未授权工具: ${call.name}` }
+            if (!canonicalCallName) {
+              toolResult = { success: false, error: `未知工具: ${call.name}` }
+            } else if (!allowedToolSet.has(canonicalCallName)) {
+              toolResult = { success: false, error: `当前助手未授权工具: ${canonicalCallName}` }
             } else {
-              toolResult = await this.runTool(call.name, args, { userInput })
+              toolResult = await this.runTool(canonicalCallName, args, { userInput })
             }
             if (!toolResult?.success) {
               trace.status = 'error'
               trace.error = normalizeText(toolResult?.error, '工具执行失败')
             } else {
-              if (call.name === 'ai_query_time_window_activity') {
+              if (canonicalCallName === 'get_time_stats' || legacyCallName === 'ai_query_time_window_activity') {
                 toolBundle.activeSessions = Array.isArray(toolResult.items) ? toolResult.items : []
-              } else if (call.name === 'ai_query_session_glimpse') {
-                const rows = Array.isArray(toolResult.rows) ? toolResult.rows : []
+              } else if (
+                canonicalCallName === 'get_recent_messages' ||
+                canonicalCallName === 'get_session_messages' ||
+                legacyCallName === 'ai_query_session_glimpse'
+              ) {
+                const rows = Array.isArray(toolResult.rows)
+                  ? toolResult.rows
+                  : Array.isArray(toolResult.rawMessages)
+                    ? toolResult.rawMessages
+                    : Array.isArray(toolResult.messages)
+                      ? toolResult.messages
+                      : []
                 if (rows.length > 0) {
-                  const merged = [...toolBundle.sessionGlimpses, ...rows]
+                  const normalizedRows = rows.map((row: any) => ({
+                    sessionId: normalizeText(row.sessionId || row._session_id || row.session_id),
+                    localId: parseIntSafe(row.localId || row.local_id || row.id),
+                    createTime: parseIntSafe(row.createTime || row.create_time || row.timestamp),
+                    sender: normalizeText(row.sender || row.senderName || row.sender_username),
+                    localType: parseIntSafe(row.localType || row.local_type || row.type),
+                    content: normalizeText(row.content || row.snippet)
+                  }))
+                  const merged = [...toolBundle.sessionGlimpses, ...normalizedRows]
                   const dedup = new Map<string, any>()
                   for (const row of merged) {
                     const key = `${normalizeText(row.sessionId || row._session_id)}:${parseIntSafe(row.localId || row.local_id)}:${parseIntSafe(row.createTime || row.create_time)}`
@@ -2516,12 +2934,33 @@ class AiAnalysisService {
                   }
                   toolBundle.sessionGlimpses = Array.from(dedup.values()).slice(0, MAX_TOOL_RESULT_ROWS)
                 }
-              } else if (call.name === 'ai_query_session_candidates') {
-                toolBundle.sessionCandidates = Array.isArray(toolResult.rows) ? toolResult.rows : []
-              } else if (call.name === 'ai_query_timeline') {
-                const rows = Array.isArray(toolResult.rows) ? toolResult.rows : []
+              } else if (canonicalCallName === 'search_sessions' || legacyCallName === 'ai_query_session_candidates') {
+                const rows = Array.isArray(toolResult.rows)
+                  ? toolResult.rows
+                  : Array.isArray(toolResult.sessions)
+                    ? toolResult.sessions
+                    : []
+                toolBundle.sessionCandidates = rows
+              } else if (
+                canonicalCallName === 'search_messages' ||
+                canonicalCallName === 'deep_search_messages' ||
+                legacyCallName === 'ai_query_timeline'
+              ) {
+                const rows = Array.isArray(toolResult.rows)
+                  ? toolResult.rows
+                  : Array.isArray(toolResult.rawMessages)
+                    ? toolResult.rawMessages
+                    : []
                 if (rows.length > 0) {
-                  const merged = [...toolBundle.timelineRows, ...rows]
+                  const normalizedRows = rows.map((row: any) => ({
+                    _session_id: normalizeText(row._session_id || row.sessionId || row.session_id),
+                    local_id: parseIntSafe(row.local_id || row.localId || row.id),
+                    create_time: parseIntSafe(row.create_time || row.createTime || row.timestamp),
+                    sender_username: normalizeText(row.sender_username || row.sender || row.senderName),
+                    local_type: parseIntSafe(row.local_type || row.localType || row.type),
+                    content: normalizeText(row.content || row.snippet)
+                  }))
+                  const merged = [...toolBundle.timelineRows, ...normalizedRows]
                   const dedup = new Map<string, any>()
                   for (const row of merged) {
                     const key = `${normalizeText(row._session_id)}:${parseIntSafe(row.local_id)}:${parseIntSafe(row.create_time)}`
@@ -2529,15 +2968,52 @@ class AiAnalysisService {
                   }
                   toolBundle.timelineRows = Array.from(dedup.values()).slice(0, MAX_TOOL_RESULT_ROWS)
                 }
-              } else if (call.name === 'ai_query_topic_stats') {
-                toolBundle.topicStats = toolResult.data || {}
-              } else if (call.name === 'ai_query_source_refs') {
-                toolBundle.sourceRefs = toolResult.data || {}
-              } else if (call.name === 'ai_query_top_contacts') {
-                toolBundle.topContacts = Array.isArray(toolResult.items) ? toolResult.items : []
-              } else if (call.name === 'ai_fetch_message_briefs') {
-                toolBundle.messageBriefs = Array.isArray(toolResult.rows) ? toolResult.rows : []
-              } else if (call.name === 'ai_list_voice_messages') {
+              } else if (canonicalCallName === 'get_chat_overview' || legacyCallName === 'ai_query_topic_stats') {
+                toolBundle.topicStats = toolResult.data || toolResult || {}
+              } else if (canonicalCallName === 'get_session_summaries' || legacyCallName === 'ai_query_source_refs') {
+                const summaries = Array.isArray(toolResult.sessions)
+                  ? toolResult.sessions
+                  : Array.isArray(toolResult.rows)
+                    ? toolResult.rows
+                    : []
+                const totalMessages = summaries.reduce((sum: number, row: any) => (
+                  sum + parseIntSafe(row.messageCount || row.message_count)
+                ), 0)
+                toolBundle.sourceRefs = toolResult.data || {
+                  range: {
+                    begin: normalizeTimestampSeconds(args.beginTimestamp ?? args.startTs),
+                    end: normalizeTimestampSeconds(args.endTimestamp ?? args.endTs)
+                  },
+                  session_count: parseIntSafe(toolResult.total, summaries.length),
+                  message_count: totalMessages,
+                  db_refs: []
+                }
+                if (summaries.length > 0) {
+                  toolBundle.sessionCandidates = summaries
+                }
+              } else if (
+                canonicalCallName === 'get_member_stats' ||
+                canonicalCallName === 'get_members' ||
+                legacyCallName === 'ai_query_top_contacts'
+              ) {
+                if (Array.isArray(toolResult.items)) {
+                  toolBundle.topContacts = toolResult.items
+                } else if (Array.isArray(toolResult.members)) {
+                  toolBundle.topContacts = toolResult.members.map((item: any) => ({
+                    sessionId: normalizeText(item.platform_id || item.sessionId || item.member_id),
+                    displayName: normalizeText(item.display_name || item.displayName || item.platform_id),
+                    messageCount: parseIntSafe(item.messageCount || item.message_count || 0)
+                  }))
+                } else {
+                  toolBundle.topContacts = []
+                }
+              } else if (canonicalCallName === 'get_message_context' || legacyCallName === 'ai_fetch_message_briefs') {
+                toolBundle.messageBriefs = Array.isArray(toolResult.rows)
+                  ? toolResult.rows
+                  : Array.isArray(toolResult.rawMessages)
+                    ? toolResult.rawMessages
+                    : []
+              } else if (canonicalCallName === 'ai_list_voice_messages' || legacyCallName === 'ai_list_voice_messages') {
                 if (Array.isArray(toolResult.items)) {
                   toolBundle.voiceCatalog = toolResult.items
                 } else if (Array.isArray(toolResult.ids)) {
@@ -2545,7 +3021,7 @@ class AiAnalysisService {
                 } else {
                   toolBundle.voiceCatalog = []
                 }
-              } else if (call.name === 'ai_transcribe_voice_messages') {
+              } else if (canonicalCallName === 'ai_transcribe_voice_messages' || legacyCallName === 'ai_transcribe_voice_messages') {
                 toolBundle.voiceTranscripts = Array.isArray(toolResult.results) ? toolResult.results : []
               }
             }
@@ -2565,12 +3041,12 @@ class AiAnalysisService {
             stage: trace.status === 'ok' ? 'tool_done' : 'tool_error',
             ts: Date.now(),
             round: loop + 1,
-            toolName: call.name,
+            toolName: displayToolName,
             status: trace.status,
             durationMs: trace.durationMs,
             message: trace.status === 'ok'
-              ? `工具 ${call.name} 完成`
-              : `工具 ${call.name} 执行失败`,
+              ? `工具 ${displayToolName} 完成`
+              : `工具 ${displayToolName} 执行失败`,
             data: {
               args,
               result: this.compactToolResultForStep(toolResult),
@@ -2583,7 +3059,7 @@ class AiAnalysisService {
             tool_call_id: call.id,
             content: JSON.stringify(toolResult || {})
           })
-          if (call.name === 'activate_skill' && toolResult?.success && normalizeText(toolResult?.prompt)) {
+          if (canonicalCallName === 'activate_skill' && toolResult?.success && normalizeText(toolResult?.prompt)) {
             modelMessages.push({
               role: 'system',
               content: `active_skill_from_tool:\n${normalizeText(toolResult.prompt)}`
@@ -2593,10 +3069,16 @@ class AiAnalysisService {
       }
 
       if (!finalText) {
-        finalText = lastAssistantText
-      }
-      if (!finalText) {
-        finalText = '模型未返回可交付文本。我会保留上下文，你可以直接继续追问，我将继续执行工具链直到交付结果。'
+        const tail = lastAssistantText ? `（最后一轮输出：${lastAssistantText.slice(0, 200)}）` : ''
+        const errorMessage = `模型在 ${MAX_TOOL_LOOPS} 轮内未输出 ${FINAL_DONE_MARKER} + <final_answer>，任务终止${tail}`
+        this.emitRunEvent(runtime?.onRunEvent, {
+          runId,
+          conversationId,
+          stage: 'error',
+          ts: Date.now(),
+          message: errorMessage
+        })
+        return { success: false, error: errorMessage }
       }
 
       this.emitRunEvent(runtime?.onRunEvent, {

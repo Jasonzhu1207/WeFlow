@@ -468,11 +468,47 @@ export class WcdbService {
     return this.callWorker('openMessageCursor', { sessionId, batchSize, ascending, beginTimestamp, endTimestamp })
   }
 
+  async openMessageCursorWithKey(
+    sessionId: string,
+    batchSize: number,
+    ascending: boolean,
+    beginTimestamp: number,
+    endTimestamp: number,
+    key?: { sortSeq?: number; createTime?: number; localId?: number }
+  ): Promise<{ success: boolean; cursor?: number; error?: string }> {
+    return this.callWorker('openMessageCursorWithKey', {
+      sessionId,
+      batchSize,
+      ascending,
+      beginTimestamp,
+      endTimestamp,
+      key
+    })
+  }
+
   /**
    * 打开轻量级消息游标
    */
   async openMessageCursorLite(sessionId: string, batchSize: number, ascending: boolean, beginTimestamp: number, endTimestamp: number): Promise<{ success: boolean; cursor?: number; error?: string }> {
     return this.callWorker('openMessageCursorLite', { sessionId, batchSize, ascending, beginTimestamp, endTimestamp })
+  }
+
+  async openMessageCursorLiteWithKey(
+    sessionId: string,
+    batchSize: number,
+    ascending: boolean,
+    beginTimestamp: number,
+    endTimestamp: number,
+    key?: { sortSeq?: number; createTime?: number; localId?: number }
+  ): Promise<{ success: boolean; cursor?: number; error?: string }> {
+    return this.callWorker('openMessageCursorLiteWithKey', {
+      sessionId,
+      batchSize,
+      ascending,
+      beginTimestamp,
+      endTimestamp,
+      key
+    })
   }
 
   /**
@@ -614,6 +650,92 @@ export class WcdbService {
     endTimestamp?: number
   }): Promise<{ success: boolean; data?: any; error?: string }> {
     return this.callWorker('aiQuerySourceRefs', { options })
+  }
+
+  async aiGetRecentMessages(options: {
+    sessionId: string
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    return this.callWorker('aiGetRecentMessages', { options })
+  }
+
+  async aiGetMessagesBefore(options: {
+    sessionId: string
+    beforeId?: number
+    beforeLocalId?: number
+    beforeCreateTime?: number
+    beforeSortSeq?: number
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    return this.callWorker('aiGetMessagesBefore', { options })
+  }
+
+  async aiGetMessagesAfter(options: {
+    sessionId: string
+    afterId?: number
+    afterLocalId?: number
+    afterCreateTime?: number
+    afterSortSeq?: number
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    return this.callWorker('aiGetMessagesAfter', { options })
+  }
+
+  async aiGetMessageContext(options: {
+    sessionId: string
+    messageIds: number[]
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    return this.callWorker('aiGetMessageContext', { options })
+  }
+
+  async aiGetSearchMessageContext(options: {
+    sessionId: string
+    messageIds: number[]
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    return this.callWorker('aiGetSearchMessageContext', { options })
+  }
+
+  async aiGetConversationBetween(options: {
+    sessionId: string
+    memberId1?: number
+    memberId2?: number
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    return this.callWorker('aiGetConversationBetween', { options })
+  }
+
+  async aiSearchSessions(options: {
+    keyword?: string
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    return this.callWorker('aiSearchSessions', { options })
+  }
+
+  async aiGetSessionMessages(options: {
+    sessionId: string
+    limit?: number
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; rows?: any[]; error?: string }> {
+    return this.callWorker('aiGetSessionMessages', { options })
+  }
+
+  async aiGetSessionSummaries(options: {
+    sessionIds?: string[]
+    beginTimestamp?: number
+    endTimestamp?: number
+  }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return this.callWorker('aiGetSessionSummaries', { options })
   }
 
   /**

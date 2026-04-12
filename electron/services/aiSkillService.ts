@@ -32,18 +32,18 @@ tags:
   - evidence
 chatScope: all
 tools:
-  - ai_query_time_window_activity
-  - ai_query_session_candidates
-  - ai_query_session_glimpse
-  - ai_query_timeline
-  - ai_fetch_message_briefs
-  - ai_query_source_refs
+  - get_time_stats
+  - search_sessions
+  - get_recent_messages
+  - search_messages
+  - get_message_context
+  - get_session_summaries
 ---
 你是“深度时间线追踪”技能。
 执行步骤：
 1. 先按时间窗扫描活跃会话，必要时补关键词筛选候选会话。
 2. 对候选会话先抽样，再拉取时间轴。
-3. 对关键节点用 ai_fetch_message_briefs 校对原文。
+3. 对关键节点用 get_message_context 校对原文。
 4. 最后输出“结论 + 关键节点 + 来源范围”。`
 
 const SKILL_CONTACT_FOCUS_MD = `---
@@ -55,17 +55,17 @@ tags:
   - relation
 chatScope: private
 tools:
-  - ai_query_top_contacts
-  - ai_query_topic_stats
-  - ai_query_session_glimpse
-  - ai_query_timeline
-  - ai_query_source_refs
+  - get_member_stats
+  - get_chat_overview
+  - get_recent_messages
+  - search_messages
+  - get_session_summaries
 ---
 你是“联系人关系聚焦”技能。
 执行步骤：
-1. 优先调用 ai_query_top_contacts 得到候选联系人排名。
+1. 优先调用 get_member_stats 得到候选联系人排名。
 2. 针对 Top 联系人读取抽样消息并补充时间轴。
-3. 如果用户问题涉及“变化趋势”，补 ai_query_topic_stats。
+3. 如果用户问题涉及“变化趋势”，补 get_chat_overview。
 4. 输出时必须给出对比口径（时间窗、样本范围、消息数量）。`
 
 const SKILL_VOICE_AUDIT_MD = `---
@@ -79,7 +79,7 @@ chatScope: all
 tools:
   - ai_list_voice_messages
   - ai_transcribe_voice_messages
-  - ai_query_source_refs
+  - get_session_summaries
 ---
 你是“语音证据审计”技能。
 硬规则：

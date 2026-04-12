@@ -164,8 +164,28 @@ if (parentPort) {
                 case 'openMessageCursor':
                     result = await core.openMessageCursor(payload.sessionId, payload.batchSize, payload.ascending, payload.beginTimestamp, payload.endTimestamp)
                     break
+                case 'openMessageCursorWithKey':
+                    result = await core.openMessageCursorWithKey(
+                      payload.sessionId,
+                      payload.batchSize,
+                      payload.ascending,
+                      payload.beginTimestamp,
+                      payload.endTimestamp,
+                      payload.key
+                    )
+                    break
                 case 'openMessageCursorLite':
                     result = await core.openMessageCursorLite(payload.sessionId, payload.batchSize, payload.ascending, payload.beginTimestamp, payload.endTimestamp)
+                    break
+                case 'openMessageCursorLiteWithKey':
+                    result = await core.openMessageCursorLiteWithKey(
+                      payload.sessionId,
+                      payload.batchSize,
+                      payload.ascending,
+                      payload.beginTimestamp,
+                      payload.endTimestamp,
+                      payload.key
+                    )
                     break
                 case 'fetchMessageBatch':
                     result = await core.fetchMessageBatch(payload.cursor)
@@ -214,6 +234,33 @@ if (parentPort) {
                     break
                 case 'aiQuerySourceRefs':
                     result = await core.aiQuerySourceRefs(payload.options || {})
+                    break
+                case 'aiGetRecentMessages':
+                    result = await core.aiGetRecentMessages(payload.options || {})
+                    break
+                case 'aiGetMessagesBefore':
+                    result = await core.aiGetMessagesBefore(payload.options || {})
+                    break
+                case 'aiGetMessagesAfter':
+                    result = await core.aiGetMessagesAfter(payload.options || {})
+                    break
+                case 'aiGetMessageContext':
+                    result = await core.aiGetMessageContext(payload.options || {})
+                    break
+                case 'aiGetSearchMessageContext':
+                    result = await core.aiGetSearchMessageContext(payload.options || {})
+                    break
+                case 'aiGetConversationBetween':
+                    result = await core.aiGetConversationBetween(payload.options || {})
+                    break
+                case 'aiSearchSessions':
+                    result = await core.aiSearchSessions(payload.options || {})
+                    break
+                case 'aiGetSessionMessages':
+                    result = await core.aiGetSessionMessages(payload.options || {})
+                    break
+                case 'aiGetSessionSummaries':
+                    result = await core.aiGetSessionSummaries(payload.options || {})
                     break
                 case 'getVoiceData':
                     result = await core.getVoiceData(payload.sessionId, payload.createTime, payload.candidates, payload.localId, payload.svrId)

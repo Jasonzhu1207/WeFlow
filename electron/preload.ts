@@ -562,6 +562,50 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('ai:listMessages', payload),
     exportConversation: (payload: { conversationId: string }) =>
       ipcRenderer.invoke('ai:exportConversation', payload),
+    getMessageContext: (sessionId: string, messageIds: number | number[], contextSize?: number) =>
+      ipcRenderer.invoke('ai:getMessageContext', sessionId, messageIds, contextSize),
+    getSearchMessageContext: (sessionId: string, messageIds: number[], contextBefore?: number, contextAfter?: number) =>
+      ipcRenderer.invoke('ai:getSearchMessageContext', sessionId, messageIds, contextBefore, contextAfter),
+    getRecentMessages: (sessionId: string, filter?: { startTs?: number; endTs?: number }, limit?: number) =>
+      ipcRenderer.invoke('ai:getRecentMessages', sessionId, filter, limit),
+    getAllRecentMessages: (sessionId: string, filter?: { startTs?: number; endTs?: number }, limit?: number) =>
+      ipcRenderer.invoke('ai:getAllRecentMessages', sessionId, filter, limit),
+    getConversationBetween: (
+      sessionId: string,
+      memberId1: number,
+      memberId2: number,
+      filter?: { startTs?: number; endTs?: number },
+      limit?: number
+    ) => ipcRenderer.invoke('ai:getConversationBetween', sessionId, memberId1, memberId2, filter, limit),
+    getMessagesBefore: (
+      sessionId: string,
+      beforeId: number,
+      limit?: number,
+      filter?: { startTs?: number; endTs?: number },
+      senderId?: number,
+      keywords?: string[]
+    ) => ipcRenderer.invoke('ai:getMessagesBefore', sessionId, beforeId, limit, filter, senderId, keywords),
+    getMessagesAfter: (
+      sessionId: string,
+      afterId: number,
+      limit?: number,
+      filter?: { startTs?: number; endTs?: number },
+      senderId?: number,
+      keywords?: string[]
+    ) => ipcRenderer.invoke('ai:getMessagesAfter', sessionId, afterId, limit, filter, senderId, keywords),
+    searchSessions: (
+      sessionId: string,
+      keywords?: string[],
+      timeFilter?: { startTs?: number; endTs?: number },
+      limit?: number,
+      previewCount?: number
+    ) => ipcRenderer.invoke('ai:searchSessions', sessionId, keywords, timeFilter, limit, previewCount),
+    getSessionMessages: (sessionId: string, chatSessionId: string | number, limit?: number) =>
+      ipcRenderer.invoke('ai:getSessionMessages', sessionId, chatSessionId, limit),
+    getSessionSummaries: (
+      sessionId: string,
+      options?: { sessionIds?: string[]; limit?: number; previewCount?: number }
+    ) => ipcRenderer.invoke('ai:getSessionSummaries', sessionId, options),
     getToolCatalog: () => ipcRenderer.invoke('ai:getToolCatalog'),
     executeTool: (payload: { name: string; args?: Record<string, any> }) =>
       ipcRenderer.invoke('ai:executeTool', payload),
@@ -578,14 +622,72 @@ contextBridge.exposeInMainWorld('electronAPI', {
       activeSkillId?: string
       chatScope?: 'group' | 'private'
       sqlContext?: { schemaText?: string; targetHint?: string }
-    }) => ipcRenderer.invoke('agent:runStream', payload),
-    abort: (payload: { runId?: string; conversationId?: string }) =>
-      ipcRenderer.invoke('agent:abort', payload),
-    onStream: (callback: (payload: any) => void) => {
-      const listener = (_: unknown, payload: any) => callback(payload)
-      ipcRenderer.on('agent:stream', listener)
-      return () => ipcRenderer.removeListener('agent:stream', listener)
-    }
+    }, onChunk?: (chunk: any) => void) => {
+      const requestId = `agent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      const promise = new Promise<{ success: boolean; result?: { success: boolean; runId?: string; conversationId?: string; error?: string; canceled?: boolean }; error?: string }>((resolve) => {
+        let settled = false
+        const cleanup = () => {
+          ipcRenderer.removeListener('agent:streamChunk', chunkHandler)
+          ipcRenderer.removeListener('agent:cancel', cancelHandler)
+          ipcRenderer.removeListener('agent:error', errorHandler)
+          ipcRenderer.removeListener('agent:complete', completeHandler)
+        }
+        const settle = (value: { success: boolean; result?: { success: boolean; runId?: string; conversationId?: string; error?: string; canceled?: boolean }; error?: string }) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          resolve(value)
+        }
+        const chunkHandler = (_: unknown, data: { requestId: string; chunk: any }) => {
+          if (data?.requestId !== requestId) return
+          if (onChunk) onChunk(data.chunk)
+        }
+        const errorHandler = (_: unknown, data: { requestId: string; error?: string; result?: { success: boolean; runId?: string; conversationId?: string; error?: string; canceled?: boolean } }) => {
+          if (data?.requestId !== requestId) return
+          settle({
+            success: false,
+            error: data?.error || data?.result?.error || '执行失败',
+            result: data?.result
+          })
+        }
+        const cancelHandler = (_: unknown, data: { requestId: string; runId?: string }) => {
+          if (data?.requestId !== requestId) return
+          settle({
+            success: false,
+            error: '任务已取消',
+            result: {
+              success: false,
+              runId: data?.runId || '',
+              conversationId: '',
+              error: '任务已取消',
+              canceled: true
+            }
+          })
+        }
+        const completeHandler = (_: unknown, data: { requestId: string; result?: { success: boolean; runId?: string; conversationId?: string; error?: string; canceled?: boolean } }) => {
+          if (data?.requestId !== requestId) return
+          if (data?.result?.error) {
+            settle({ success: false, error: data.result.error, result: data.result })
+            return
+          }
+          settle({ success: Boolean(data?.result?.success ?? true), result: data?.result })
+        }
+        ipcRenderer.on('agent:streamChunk', chunkHandler)
+        ipcRenderer.on('agent:cancel', cancelHandler)
+        ipcRenderer.on('agent:error', errorHandler)
+        ipcRenderer.on('agent:complete', completeHandler)
+        ipcRenderer.invoke('agent:runStream', requestId, payload).then((result: { success?: boolean; error?: string }) => {
+          if (result?.success === false) {
+            settle({ success: false, error: result.error || '启动失败' })
+          }
+        }).catch((error) => {
+          settle({ success: false, error: String(error) })
+        })
+      })
+      return { requestId, promise }
+    },
+    abort: (payload: string | { requestId?: string; runId?: string; conversationId?: string }) =>
+      ipcRenderer.invoke('agent:abort', payload)
   },
 
   assistantApi: {
@@ -617,48 +719,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listModels: () => ipcRenderer.invoke('llm:listModels')
   },
 
-  aiAnalysis: {
-    listConversations: (payload?: { page?: number; pageSize?: number }) =>
-      ipcRenderer.invoke('aiAnalysis:listConversations', payload),
-    createConversation: (payload?: { title?: string }) =>
-      ipcRenderer.invoke('aiAnalysis:createConversation', payload),
-    deleteConversation: (conversationId: string) =>
-      ipcRenderer.invoke('aiAnalysis:deleteConversation', conversationId),
-    listMessages: (payload: { conversationId: string; limit?: number }) =>
-      ipcRenderer.invoke('aiAnalysis:listMessages', payload),
-    sendMessage: (payload: {
-      conversationId: string
-      userInput: string
-      options?: {
-        parentMessageId?: string
-        persistUserMessage?: boolean
-        assistantId?: string
-        activeSkillId?: string
-        chatScope?: 'group' | 'private'
-      }
-    }) => ipcRenderer.invoke('aiAnalysis:sendMessage', payload),
-    retryMessage: (payload: { conversationId: string; userMessageId?: string }) =>
-      ipcRenderer.invoke('aiAnalysis:retryMessage', payload),
-    abortRun: (payload: { runId?: string; conversationId?: string }) =>
-      ipcRenderer.invoke('aiAnalysis:abortRun', payload),
-    onRunEvent: (callback: (payload: {
-      runId: string
-      conversationId: string
-      stage: string
-      ts: number
-      message: string
-      intent?: string
-      round?: number
-      toolName?: string
-      status?: string
-      durationMs?: number
-      data?: Record<string, unknown>
-    }) => void) => {
-      const listener = (_: unknown, payload: any) => callback(payload)
-      ipcRenderer.on('aiAnalysis:runEvent', listener)
-      return () => ipcRenderer.removeListener('aiAnalysis:runEvent', listener)
-    }
-  }
+  
 })
 
 contextBridge.exposeInMainWorld('aiApi', {
@@ -668,6 +729,50 @@ contextBridge.exposeInMainWorld('aiApi', {
   deleteConversation: (conversationId: string) => ipcRenderer.invoke('ai:deleteConversation', conversationId),
   listMessages: (payload: { conversationId: string; limit?: number }) => ipcRenderer.invoke('ai:listMessages', payload),
   exportConversation: (payload: { conversationId: string }) => ipcRenderer.invoke('ai:exportConversation', payload),
+  getMessageContext: (sessionId: string, messageIds: number | number[], contextSize?: number) =>
+    ipcRenderer.invoke('ai:getMessageContext', sessionId, messageIds, contextSize),
+  getSearchMessageContext: (sessionId: string, messageIds: number[], contextBefore?: number, contextAfter?: number) =>
+    ipcRenderer.invoke('ai:getSearchMessageContext', sessionId, messageIds, contextBefore, contextAfter),
+  getRecentMessages: (sessionId: string, filter?: { startTs?: number; endTs?: number }, limit?: number) =>
+    ipcRenderer.invoke('ai:getRecentMessages', sessionId, filter, limit),
+  getAllRecentMessages: (sessionId: string, filter?: { startTs?: number; endTs?: number }, limit?: number) =>
+    ipcRenderer.invoke('ai:getAllRecentMessages', sessionId, filter, limit),
+  getConversationBetween: (
+    sessionId: string,
+    memberId1: number,
+    memberId2: number,
+    filter?: { startTs?: number; endTs?: number },
+    limit?: number
+  ) => ipcRenderer.invoke('ai:getConversationBetween', sessionId, memberId1, memberId2, filter, limit),
+  getMessagesBefore: (
+    sessionId: string,
+    beforeId: number,
+    limit?: number,
+    filter?: { startTs?: number; endTs?: number },
+    senderId?: number,
+    keywords?: string[]
+  ) => ipcRenderer.invoke('ai:getMessagesBefore', sessionId, beforeId, limit, filter, senderId, keywords),
+  getMessagesAfter: (
+    sessionId: string,
+    afterId: number,
+    limit?: number,
+    filter?: { startTs?: number; endTs?: number },
+    senderId?: number,
+    keywords?: string[]
+  ) => ipcRenderer.invoke('ai:getMessagesAfter', sessionId, afterId, limit, filter, senderId, keywords),
+  searchSessions: (
+    sessionId: string,
+    keywords?: string[],
+    timeFilter?: { startTs?: number; endTs?: number },
+    limit?: number,
+    previewCount?: number
+  ) => ipcRenderer.invoke('ai:searchSessions', sessionId, keywords, timeFilter, limit, previewCount),
+  getSessionMessages: (sessionId: string, chatSessionId: string | number, limit?: number) =>
+    ipcRenderer.invoke('ai:getSessionMessages', sessionId, chatSessionId, limit),
+  getSessionSummaries: (
+    sessionId: string,
+    options?: { sessionIds?: string[]; limit?: number; previewCount?: number }
+  ) => ipcRenderer.invoke('ai:getSessionSummaries', sessionId, options),
   getToolCatalog: () => ipcRenderer.invoke('ai:getToolCatalog'),
   executeTool: (payload: { name: string; args?: Record<string, any> }) => ipcRenderer.invoke('ai:executeTool', payload),
   cancelToolTest: (payload?: { taskId?: string }) => ipcRenderer.invoke('ai:cancelToolTest', payload)
@@ -682,13 +787,71 @@ contextBridge.exposeInMainWorld('agentApi', {
     activeSkillId?: string
     chatScope?: 'group' | 'private'
     sqlContext?: { schemaText?: string; targetHint?: string }
-  }) => ipcRenderer.invoke('agent:runStream', payload),
-  abort: (payload: { runId?: string; conversationId?: string }) => ipcRenderer.invoke('agent:abort', payload),
-  onStream: (callback: (payload: any) => void) => {
-    const listener = (_: unknown, payload: any) => callback(payload)
-    ipcRenderer.on('agent:stream', listener)
-    return () => ipcRenderer.removeListener('agent:stream', listener)
-  }
+  }, onChunk?: (chunk: any) => void) => {
+    const requestId = `agent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const promise = new Promise<{ success: boolean; result?: { success: boolean; runId?: string; conversationId?: string; error?: string; canceled?: boolean }; error?: string }>((resolve) => {
+      let settled = false
+      const cleanup = () => {
+        ipcRenderer.removeListener('agent:streamChunk', chunkHandler)
+        ipcRenderer.removeListener('agent:cancel', cancelHandler)
+        ipcRenderer.removeListener('agent:error', errorHandler)
+        ipcRenderer.removeListener('agent:complete', completeHandler)
+      }
+      const settle = (value: { success: boolean; result?: { success: boolean; runId?: string; conversationId?: string; error?: string; canceled?: boolean }; error?: string }) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve(value)
+      }
+      const chunkHandler = (_: unknown, data: { requestId: string; chunk: any }) => {
+        if (data?.requestId !== requestId) return
+        if (onChunk) onChunk(data.chunk)
+      }
+      const errorHandler = (_: unknown, data: { requestId: string; error?: string; result?: { success: boolean; runId?: string; conversationId?: string; error?: string; canceled?: boolean } }) => {
+        if (data?.requestId !== requestId) return
+        settle({
+          success: false,
+          error: data?.error || data?.result?.error || '执行失败',
+          result: data?.result
+        })
+      }
+      const cancelHandler = (_: unknown, data: { requestId: string; runId?: string }) => {
+        if (data?.requestId !== requestId) return
+        settle({
+          success: false,
+          error: '任务已取消',
+          result: {
+            success: false,
+            runId: data?.runId || '',
+            conversationId: '',
+            error: '任务已取消',
+            canceled: true
+          }
+        })
+      }
+      const completeHandler = (_: unknown, data: { requestId: string; result?: { success: boolean; runId?: string; conversationId?: string; error?: string; canceled?: boolean } }) => {
+        if (data?.requestId !== requestId) return
+        if (data?.result?.error) {
+          settle({ success: false, error: data.result.error, result: data.result })
+          return
+        }
+        settle({ success: Boolean(data?.result?.success ?? true), result: data?.result })
+      }
+      ipcRenderer.on('agent:streamChunk', chunkHandler)
+      ipcRenderer.on('agent:cancel', cancelHandler)
+      ipcRenderer.on('agent:error', errorHandler)
+      ipcRenderer.on('agent:complete', completeHandler)
+      ipcRenderer.invoke('agent:runStream', requestId, payload).then((result: { success?: boolean; error?: string }) => {
+        if (result?.success === false) {
+          settle({ success: false, error: result.error || '启动失败' })
+        }
+      }).catch((error) => {
+        settle({ success: false, error: String(error) })
+      })
+    })
+    return { requestId, promise }
+  },
+  abort: (payload: string | { requestId?: string; runId?: string; conversationId?: string }) => ipcRenderer.invoke('agent:abort', payload)
 })
 
 contextBridge.exposeInMainWorld('assistantApi', {

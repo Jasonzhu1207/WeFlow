@@ -1,4 +1,4 @@
-工具：ai_query_source_refs
+工具：get_session_summaries
 
 何时用：
 - 输出总结或分析后，用于来源说明与可解释卡片。

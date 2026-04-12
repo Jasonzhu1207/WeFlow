@@ -1,4 +1,4 @@
-工具：ai_query_topic_stats
+工具：get_chat_overview
 
 何时用：
 - 用户问“多少、占比、趋势、对比”。

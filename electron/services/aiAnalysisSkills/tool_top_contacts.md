@@ -1,4 +1,4 @@
-工具：ai_query_top_contacts
+工具：get_member_stats
 
 何时用：
 - 用户问“谁联系最密切”“谁聊得最多”“最常联系的是谁”。

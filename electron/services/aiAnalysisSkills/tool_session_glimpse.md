@@ -1,4 +1,4 @@
-工具：ai_query_session_glimpse
+工具：get_recent_messages
 
 何时用：
 - 已确定候选会话，需要“先看一点”理解上下文。

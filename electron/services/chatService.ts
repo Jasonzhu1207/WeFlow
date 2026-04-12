@@ -174,6 +174,36 @@ interface GetContactsOptions {
   lite?: boolean
 }
 
+interface AiTimeFilter {
+  startTs?: number
+  endTs?: number
+}
+
+interface AiMessageResult {
+  id: number
+  localId: number
+  sessionId: string
+  senderName: string
+  senderPlatformId: string
+  senderUsername: string
+  content: string
+  timestamp: number
+  type: number
+  isSend: number | null
+  replyToMessageId: string | null
+  replyToContent: string | null
+  replyToSenderName: string | null
+}
+
+interface AiSessionSearchResult {
+  id: string
+  startTs: number
+  endTs: number
+  messageCount: number
+  isComplete: boolean
+  previewMessages: AiMessageResult[]
+}
+
 interface ExportSessionStats {
   totalMessages: number
   voiceMessages: number
@@ -8472,6 +8502,451 @@ class ChatService {
       console.error('[ChatService] 导出我的足迹失败:', error)
       return { success: false, error: String(error) }
     }
+  }
+
+  private normalizeAiFilter(filter?: AiTimeFilter): { begin: number; end: number } {
+    const begin = this.normalizeTimestampSeconds(Number(filter?.startTs || 0))
+    const end = this.normalizeTimestampSeconds(Number(filter?.endTs || 0))
+    return { begin, end }
+  }
+
+  private hashSenderId(senderUsername: string): number {
+    const text = String(senderUsername || '').trim().toLowerCase()
+    if (!text) return 0
+    let hash = 5381
+    for (let i = 0; i < text.length; i += 1) {
+      hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0
+    }
+    return Math.abs(hash)
+  }
+
+  private messageMatchesKeywords(message: Message, keywords?: string[]): boolean {
+    if (!Array.isArray(keywords) || keywords.length === 0) return true
+    const text = String(message.parsedContent || message.rawContent || '').toLowerCase()
+    if (!text) return false
+    return keywords.every((keyword) => {
+      const token = String(keyword || '').trim().toLowerCase()
+      if (!token) return true
+      return text.includes(token)
+    })
+  }
+
+  private toAiMessage(sessionId: string, message: Message): AiMessageResult {
+    const senderUsername = String(message.senderUsername || '').trim()
+    const senderName = senderUsername || (message.isSend === 1 ? '我' : '未知成员')
+    const content = String(message.parsedContent || message.rawContent || '').trim()
+    return {
+      id: message.localId,
+      localId: message.localId,
+      sessionId,
+      senderName,
+      senderPlatformId: senderUsername,
+      senderUsername,
+      content,
+      timestamp: Number(message.createTime || 0),
+      type: Number(message.localType || 0),
+      isSend: message.isSend,
+      replyToMessageId: message.messageKey || null,
+      replyToContent: message.quotedContent || null,
+      replyToSenderName: message.quotedSender || null
+    }
+  }
+
+  private async fetchMessagesByCursorWithKey(
+    sessionId: string,
+    key: { sortSeq?: number; createTime?: number; localId?: number },
+    limit: number,
+    ascending: boolean,
+    beginTimestamp = 0,
+    endTimestamp = 0
+  ): Promise<{ success: boolean; messages?: Message[]; hasMore?: boolean; error?: string }> {
+    const batchSize = Math.max(limit + 8, Math.min(240, limit * 2))
+    const cursorResult = await wcdbService.openMessageCursorWithKey(
+      sessionId,
+      batchSize,
+      ascending,
+      beginTimestamp,
+      endTimestamp,
+      key
+    )
+    if (!cursorResult.success || !cursorResult.cursor) {
+      return { success: false, error: cursorResult.error || '创建游标失败' }
+    }
+
+    try {
+      const collected = await this.collectVisibleMessagesFromCursor(sessionId, cursorResult.cursor, limit)
+      if (!collected.success) {
+        return { success: false, error: collected.error || '读取消息失败' }
+      }
+      return {
+        success: true,
+        messages: collected.messages || [],
+        hasMore: collected.hasMore === true
+      }
+    } finally {
+      await wcdbService.closeMessageCursor(cursorResult.cursor).catch(() => {})
+    }
+  }
+
+  async getRecentMessagesForAI(
+    sessionId: string,
+    filter?: AiTimeFilter,
+    limit = 100
+  ): Promise<{ messages: AiMessageResult[]; total: number }> {
+    const normalizedLimit = Math.max(1, Math.min(500, Number(limit || 100)))
+    const { begin, end } = this.normalizeAiFilter(filter)
+    const result = await this.getLatestMessages(sessionId, normalizedLimit)
+    if (!result.success || !Array.isArray(result.messages)) {
+      return { messages: [], total: 0 }
+    }
+    const bounded = result.messages.filter((message) => {
+      if (begin > 0 && Number(message.createTime || 0) < begin) return false
+      if (end > 0 && Number(message.createTime || 0) > end) return false
+      return String(message.parsedContent || message.rawContent || '').trim().length > 0
+    })
+    return {
+      messages: bounded.slice(-normalizedLimit).map((message) => this.toAiMessage(sessionId, message)),
+      total: bounded.length
+    }
+  }
+
+  async getMessagesBeforeForAI(
+    sessionId: string,
+    beforeId: number,
+    limit = 50,
+    filter?: AiTimeFilter,
+    senderId?: number,
+    keywords?: string[]
+  ): Promise<{ messages: AiMessageResult[]; hasMore: boolean }> {
+    const base = await this.getMessageById(sessionId, Number(beforeId))
+    if (!base.success || !base.message) {
+      return { messages: [], hasMore: false }
+    }
+    const normalizedLimit = Math.max(1, Math.min(300, Number(limit || 50)))
+    const { begin, end } = this.normalizeAiFilter(filter)
+    const cursor = await this.fetchMessagesByCursorWithKey(
+      sessionId,
+      {
+        sortSeq: base.message.sortSeq,
+        createTime: base.message.createTime,
+        localId: base.message.localId
+      },
+      Math.max(normalizedLimit * 2, normalizedLimit + 12),
+      false,
+      begin,
+      end
+    )
+    if (!cursor.success) {
+      return { messages: [], hasMore: false }
+    }
+    const filtered = (cursor.messages || []).filter((message) => {
+      if (senderId && senderId > 0) {
+        const hashed = this.hashSenderId(String(message.senderUsername || ''))
+        if (hashed !== senderId) return false
+      }
+      return this.messageMatchesKeywords(message, keywords)
+    })
+    const sliced = filtered.slice(-normalizedLimit)
+    return {
+      messages: sliced.map((message) => this.toAiMessage(sessionId, message)),
+      hasMore: cursor.hasMore === true || filtered.length > normalizedLimit
+    }
+  }
+
+  async getMessagesAfterForAI(
+    sessionId: string,
+    afterId: number,
+    limit = 50,
+    filter?: AiTimeFilter,
+    senderId?: number,
+    keywords?: string[]
+  ): Promise<{ messages: AiMessageResult[]; hasMore: boolean }> {
+    const base = await this.getMessageById(sessionId, Number(afterId))
+    if (!base.success || !base.message) {
+      return { messages: [], hasMore: false }
+    }
+    const normalizedLimit = Math.max(1, Math.min(300, Number(limit || 50)))
+    const { begin, end } = this.normalizeAiFilter(filter)
+    const cursor = await this.fetchMessagesByCursorWithKey(
+      sessionId,
+      {
+        sortSeq: base.message.sortSeq,
+        createTime: base.message.createTime,
+        localId: base.message.localId
+      },
+      Math.max(normalizedLimit * 2, normalizedLimit + 12),
+      true,
+      begin,
+      end
+    )
+    if (!cursor.success) {
+      return { messages: [], hasMore: false }
+    }
+    const filtered = (cursor.messages || []).filter((message) => {
+      if (senderId && senderId > 0) {
+        const hashed = this.hashSenderId(String(message.senderUsername || ''))
+        if (hashed !== senderId) return false
+      }
+      return this.messageMatchesKeywords(message, keywords)
+    })
+    const sliced = filtered.slice(0, normalizedLimit)
+    return {
+      messages: sliced.map((message) => this.toAiMessage(sessionId, message)),
+      hasMore: cursor.hasMore === true || filtered.length > normalizedLimit
+    }
+  }
+
+  async getMessageContextForAI(
+    sessionId: string,
+    messageIds: number | number[],
+    contextSize = 20
+  ): Promise<AiMessageResult[]> {
+    const ids = Array.isArray(messageIds) ? messageIds : [messageIds]
+    const uniqueIds = Array.from(new Set(ids.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)))
+    if (uniqueIds.length === 0) return []
+    const size = Math.max(0, Math.min(120, Number(contextSize || 20)))
+    const merged = new Map<number, AiMessageResult>()
+
+    for (const id of uniqueIds) {
+      const target = await this.getMessageById(sessionId, id)
+      if (target.success && target.message) {
+        merged.set(id, this.toAiMessage(sessionId, target.message))
+      }
+      if (size <= 0) continue
+      const [before, after] = await Promise.all([
+        this.getMessagesBeforeForAI(sessionId, id, size),
+        this.getMessagesAfterForAI(sessionId, id, size)
+      ])
+      for (const item of before.messages) merged.set(item.id, item)
+      for (const item of after.messages) merged.set(item.id, item)
+    }
+
+    return Array.from(merged.values()).sort((a, b) => {
+      if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp
+      return a.id - b.id
+    })
+  }
+
+  async getSearchMessageContextForAI(
+    sessionId: string,
+    messageIds: number[],
+    contextBefore = 2,
+    contextAfter = 2
+  ): Promise<AiMessageResult[]> {
+    const uniqueIds = Array.from(new Set((messageIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)))
+    if (uniqueIds.length === 0) return []
+    const beforeLimit = Math.max(0, Math.min(30, Number(contextBefore || 2)))
+    const afterLimit = Math.max(0, Math.min(30, Number(contextAfter || 2)))
+    const merged = new Map<number, AiMessageResult>()
+
+    for (const id of uniqueIds) {
+      const target = await this.getMessageById(sessionId, id)
+      if (target.success && target.message) {
+        merged.set(id, this.toAiMessage(sessionId, target.message))
+      }
+      const [before, after] = await Promise.all([
+        beforeLimit > 0 ? this.getMessagesBeforeForAI(sessionId, id, beforeLimit) : Promise.resolve({ messages: [], hasMore: false }),
+        afterLimit > 0 ? this.getMessagesAfterForAI(sessionId, id, afterLimit) : Promise.resolve({ messages: [], hasMore: false })
+      ])
+      for (const item of before.messages) merged.set(item.id, item)
+      for (const item of after.messages) merged.set(item.id, item)
+    }
+
+    return Array.from(merged.values()).sort((a, b) => {
+      if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp
+      return a.id - b.id
+    })
+  }
+
+  async getConversationBetweenForAI(
+    sessionId: string,
+    memberId1: number,
+    memberId2: number,
+    filter?: AiTimeFilter,
+    limit = 100
+  ): Promise<{ messages: AiMessageResult[]; total: number; member1Name: string; member2Name: string }> {
+    const normalizedLimit = Math.max(1, Math.min(500, Number(limit || 100)))
+    const { begin, end } = this.normalizeAiFilter(filter)
+    const sample = await this.getMessages(sessionId, 0, Math.max(600, normalizedLimit * 8), begin, end, false)
+    if (!sample.success || !Array.isArray(sample.messages) || sample.messages.length === 0) {
+      return { messages: [], total: 0, member1Name: '', member2Name: '' }
+    }
+
+    const idSet = new Set<number>([Number(memberId1), Number(memberId2)].filter((id) => Number.isFinite(id) && id > 0))
+    const filtered = sample.messages.filter((message) => {
+      const senderId = this.hashSenderId(String(message.senderUsername || ''))
+      return idSet.has(senderId) && String(message.parsedContent || message.rawContent || '').trim().length > 0
+    })
+    const picked = filtered.slice(-normalizedLimit)
+    const names = Array.from(new Set(picked.map((message) => String(message.senderUsername || '').trim()).filter(Boolean)))
+    return {
+      messages: picked.map((message) => this.toAiMessage(sessionId, message)),
+      total: filtered.length,
+      member1Name: names[0] || '',
+      member2Name: names[1] || names[0] || ''
+    }
+  }
+
+  async searchSessionsForAI(
+    _sessionId: string,
+    keywords?: string[],
+    timeFilter?: AiTimeFilter,
+    limit = 20,
+    previewCount = 5
+  ): Promise<AiSessionSearchResult[]> {
+    const normalizedLimit = Math.max(1, Math.min(60, Number(limit || 20)))
+    const normalizedPreview = Math.max(1, Math.min(20, Number(previewCount || 5)))
+    const { begin, end } = this.normalizeAiFilter(timeFilter)
+    const tokenList = Array.from(new Set((keywords || []).map((keyword) => String(keyword || '').trim()).filter(Boolean)))
+
+    const sessionsResult = await this.getSessions()
+    if (!sessionsResult.success || !Array.isArray(sessionsResult.sessions)) return []
+    const sessionMap = new Map<string, ChatSession>()
+    for (const session of sessionsResult.sessions) {
+      const sid = String(session.username || '').trim()
+      if (!sid) continue
+      sessionMap.set(sid, session)
+    }
+
+    const rows: Array<{ sessionId: string; hitCount: number }> = []
+    if (tokenList.length > 0) {
+      const native = await wcdbService.aiQuerySessionCandidates({
+        keyword: tokenList.join(' '),
+        limit: normalizedLimit * 4,
+        beginTimestamp: begin,
+        endTimestamp: end
+      })
+      if (native.success && Array.isArray(native.rows)) {
+        for (const row of native.rows as Record<string, any>[]) {
+          const sid = String(row.session_id || row._session_id || row.sessionId || '').trim()
+          if (!sid) continue
+          rows.push({
+            sessionId: sid,
+            hitCount: this.toSafeInt(row.hit_count ?? row.count ?? row.message_count, 0)
+          })
+        }
+      }
+    }
+
+    const candidateIds = rows.length > 0
+      ? Array.from(new Set(rows.map((item) => item.sessionId)))
+      : sessionsResult.sessions
+        .filter((session) => {
+          if (begin > 0 && Number(session.lastTimestamp || session.sortTimestamp || 0) < begin) return false
+          if (end > 0 && Number(session.lastTimestamp || session.sortTimestamp || 0) > end) return false
+          return true
+        })
+        .slice(0, normalizedLimit * 2)
+        .map((session) => String(session.username || '').trim())
+        .filter(Boolean)
+
+    const output: AiSessionSearchResult[] = []
+    for (const sid of candidateIds.slice(0, normalizedLimit)) {
+      const latest = await this.getLatestMessages(sid, normalizedPreview)
+      const messages = Array.isArray(latest.messages) ? latest.messages : []
+      const mapped = messages.map((message) => this.toAiMessage(sid, message)).slice(-normalizedPreview)
+      const hitRow = rows.find((item) => item.sessionId === sid)
+      const session = sessionMap.get(sid)
+      const tsList = mapped.map((item) => item.timestamp).filter((value) => Number.isFinite(value) && value > 0)
+      const startTs = tsList.length > 0 ? Math.min(...tsList) : 0
+      const endTs = tsList.length > 0 ? Math.max(...tsList) : Number(session?.lastTimestamp || session?.sortTimestamp || 0)
+      output.push({
+        id: sid,
+        startTs,
+        endTs,
+        messageCount: hitRow?.hitCount || mapped.length,
+        isComplete: mapped.length <= normalizedPreview,
+        previewMessages: mapped
+      })
+    }
+
+    return output
+  }
+
+  async getSessionMessagesForAI(
+    _sessionId: string,
+    chatSessionId: string | number,
+    limit = 500
+  ): Promise<{
+    sessionId: string
+    startTs: number
+    endTs: number
+    messageCount: number
+    returnedCount: number
+    participants: string[]
+    messages: AiMessageResult[]
+  } | null> {
+    const sid = String(chatSessionId || '').trim()
+    if (!sid) return null
+    const normalizedLimit = Math.max(1, Math.min(1000, Number(limit || 500)))
+    const latest = await this.getLatestMessages(sid, normalizedLimit)
+    if (!latest.success || !Array.isArray(latest.messages)) return null
+    const mapped = latest.messages.map((message) => this.toAiMessage(sid, message))
+    const tsList = mapped.map((item) => item.timestamp).filter((value) => Number.isFinite(value) && value > 0)
+    const count = await this.getMessageCount(sid)
+    return {
+      sessionId: sid,
+      startTs: tsList.length > 0 ? Math.min(...tsList) : 0,
+      endTs: tsList.length > 0 ? Math.max(...tsList) : 0,
+      messageCount: count.success ? Number(count.count || mapped.length) : mapped.length,
+      returnedCount: mapped.length,
+      participants: Array.from(new Set(mapped.map((item) => item.senderName).filter(Boolean))),
+      messages: mapped
+    }
+  }
+
+  async getSessionSummariesForAI(
+    _sessionId: string,
+    options?: {
+      sessionIds?: string[]
+      limit?: number
+      previewCount?: number
+    }
+  ): Promise<Array<{
+    sessionId: string
+    sessionName: string
+    messageCount: number
+    latestTs: number
+    previewMessages: AiMessageResult[]
+  }>> {
+    const normalizedLimit = Math.max(1, Math.min(60, Number(options?.limit || 20)))
+    const previewCount = Math.max(1, Math.min(20, Number(options?.previewCount || 3)))
+    const sessionsResult = await this.getSessions()
+    if (!sessionsResult.success || !Array.isArray(sessionsResult.sessions)) return []
+    const explicitIds = Array.isArray(options?.sessionIds)
+      ? options?.sessionIds.map((value) => String(value || '').trim()).filter(Boolean)
+      : []
+    const candidates = explicitIds.length > 0
+      ? sessionsResult.sessions.filter((session) => explicitIds.includes(String(session.username || '').trim()))
+      : sessionsResult.sessions.slice(0, normalizedLimit)
+
+    const summaries: Array<{
+      sessionId: string
+      sessionName: string
+      messageCount: number
+      latestTs: number
+      previewMessages: AiMessageResult[]
+    }> = []
+
+    for (const session of candidates.slice(0, normalizedLimit)) {
+      const sid = String(session.username || '').trim()
+      if (!sid) continue
+      const [countResult, latestResult] = await Promise.all([
+        this.getMessageCount(sid),
+        this.getLatestMessages(sid, previewCount)
+      ])
+      const previewMessages = Array.isArray(latestResult.messages)
+        ? latestResult.messages.map((message) => this.toAiMessage(sid, message)).slice(-previewCount)
+        : []
+      summaries.push({
+        sessionId: sid,
+        sessionName: String(session.displayName || sid),
+        messageCount: countResult.success ? Number(countResult.count || previewMessages.length) : previewMessages.length,
+        latestTs: Number(session.lastTimestamp || session.sortTimestamp || 0),
+        previewMessages
+      })
+    }
+    return summaries
   }
 
   async getMessageById(sessionId: string, localId: number): Promise<{ success: boolean; message?: Message; error?: string }> {

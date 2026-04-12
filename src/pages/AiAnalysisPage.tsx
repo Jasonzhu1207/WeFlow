@@ -6,14 +6,15 @@ import {
   Database,
   Download,
   Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   RefreshCw,
-  Search,
   Send,
   Sparkles,
-  SquareTerminal,
   Trash2,
-  Wrench
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
 import type {
   AiConversation,
@@ -25,10 +26,9 @@ import type {
   ToolCatalogEntry
 } from '../types/aiAnalysis'
 import { useAiRuntimeStore } from '../stores/aiRuntimeStore'
-import type { AgentStreamChunk } from '../types/electron'
 import './AiAnalysisPage.scss'
 
-type MainTab = 'chat' | 'sql' | 'tool'
+type MainTab = 'chat' | 'sql'
 type ScopeMode = 'global' | 'contact' | 'session'
 
 function formatDateTime(ts: number): string {
@@ -47,7 +47,10 @@ function normalizeText(value: unknown, fallback = ''): string {
   return text || fallback
 }
 
-function extractSqlTarget(schema: SqlSchemaPayload | null, key: string): { kind: 'message' | 'contact' | 'biz'; path: string | null } | null {
+function extractSqlTarget(
+  schema: SqlSchemaPayload | null,
+  key: string
+): { kind: 'message' | 'contact' | 'biz'; path: string | null } | null {
   if (!schema) return null
   for (const source of schema.sources) {
     const sourceKey = `${source.kind}:${source.path || ''}`
@@ -63,7 +66,9 @@ function toCsv(rows: Record<string, unknown>[], columns: string[]): string {
     return text
   }
   const header = columns.map((column) => esc(column)).join(',')
-  const body = rows.map((row) => columns.map((column) => esc(row[column])).join(',')).join('\n')
+  const body = rows
+    .map((row) => columns.map((column) => esc(row[column])).join(','))
+    .join('\n')
   return `${header}\n${body}`
 }
 
@@ -72,7 +77,9 @@ function AiAnalysisPage() {
   const agentApi = window.electronAPI.agentApi
   const assistantApi = window.electronAPI.assistantApi
   const skillApi = window.electronAPI.skillApi
+
   const [activeTab, setActiveTab] = useState<MainTab>('chat')
+  const [showDataPanel, setShowDataPanel] = useState(true)
   const [scopeMode, setScopeMode] = useState<ScopeMode>('global')
   const [scopeTarget, setScopeTarget] = useState('')
   const [conversations, setConversations] = useState<AiConversation[]>([])
@@ -102,34 +109,39 @@ function AiAnalysisPage() {
   const [sqlPage, setSqlPage] = useState(1)
   const [sqlPageSize] = useState(50)
 
-  const [toolCatalog, setToolCatalog] = useState<ToolCatalogEntry[]>([])
-  const [toolName, setToolName] = useState('')
-  const [toolArgsText, setToolArgsText] = useState('{}')
-  const [toolRunning, setToolRunning] = useState(false)
-  const [toolOutput, setToolOutput] = useState('')
-
-  const sqlRunIdRef = useRef('')
+  const messageContainerRef = useRef<HTMLDivElement | null>(null)
   const sqlGeneratedRef = useRef('')
-  const messageEndRef = useRef<HTMLDivElement | null>(null)
+  const [showScrollBottom, setShowScrollBottom] = useState(false)
 
-  const activeRunId = useAiRuntimeStore((state) => state.activeRunId)
   const runtimeState = useAiRuntimeStore((state) => (
     currentConversationId ? state.states[currentConversationId] : undefined
   ))
+  const activeRequestId = useAiRuntimeStore((state) => state.activeRequestId)
   const startRun = useAiRuntimeStore((state) => state.startRun)
   const appendChunk = useAiRuntimeStore((state) => state.appendChunk)
-  const finishRun = useAiRuntimeStore((state) => state.finishRun)
+  const completeRun = useAiRuntimeStore((state) => state.completeRun)
 
   const selectedAssistant = useMemo(
     () => assistants.find((assistant) => assistant.id === selectedAssistantId) || null,
     [assistants, selectedAssistantId]
   )
+  const showThinkBlocks = useMemo(() => {
+    try {
+      const query = new URLSearchParams(window.location.search)
+      if (query.get('debugThink') === '1') return true
+      return window.localStorage.getItem('wf_ai_debug_think') === '1'
+    } catch {
+      return false
+    }
+  }, [])
 
   const slashSuggestions = useMemo(() => {
     const text = normalizeText(input)
     if (!text.startsWith('/')) return []
     const key = text.slice(1).toLowerCase()
-    return skills.filter((skill) => !key || skill.id.includes(key) || skill.name.toLowerCase().includes(key)).slice(0, 8)
+    return skills
+      .filter((skill) => !key || skill.id.includes(key) || skill.name.toLowerCase().includes(key))
+      .slice(0, 8)
   }, [input, skills])
 
   const mentionSuggestions = useMemo(() => {
@@ -137,7 +149,11 @@ function AiAnalysisPage() {
     if (!match) return []
     const keyword = match[1].toLowerCase()
     return contacts
-      .filter((contact) => !keyword || contact.displayName.toLowerCase().includes(keyword) || contact.username.toLowerCase().includes(keyword))
+      .filter((contact) =>
+        !keyword ||
+        contact.displayName.toLowerCase().includes(keyword) ||
+        contact.username.toLowerCase().includes(keyword)
+      )
       .slice(0, 8)
   }, [contacts, input])
 
@@ -177,7 +193,9 @@ function AiAnalysisPage() {
       }
       const list = res.conversations || []
       setConversations(list)
-      if (!currentConversationId && list.length > 0) setCurrentConversationId(list[0].conversationId)
+      if (!currentConversationId && list.length > 0) {
+        setCurrentConversationId(list[0].conversationId)
+      }
     } finally {
       setLoadingConversations(false)
     }
@@ -206,7 +224,11 @@ function AiAnalysisPage() {
       ])
       setAssistants(assistantList || [])
       setSkills(skillList || [])
-      if (assistantList && assistantList.length > 0 && !assistantList.some((item) => item.id === selectedAssistantId)) {
+      if (
+        assistantList &&
+        assistantList.length > 0 &&
+        !assistantList.some((item) => item.id === selectedAssistantId)
+      ) {
         setSelectedAssistantId(assistantList[0].id)
       }
     } catch (error) {
@@ -221,7 +243,12 @@ function AiAnalysisPage() {
       const list = res.contacts
         .map((contact) => ({
           username: normalizeText(contact.username),
-          displayName: normalizeText(contact.displayName || contact.remark || contact.nickname || contact.username)
+          displayName: normalizeText(
+            contact.displayName ||
+            contact.remark ||
+            contact.nickname ||
+            contact.username
+          )
         }))
         .filter((contact) => contact.username && contact.displayName)
         .slice(0, 300)
@@ -230,18 +257,6 @@ function AiAnalysisPage() {
       // ignore
     }
   }, [])
-
-  const loadToolCatalog = useCallback(async () => {
-    try {
-      const catalog = await aiApi.getToolCatalog()
-      setToolCatalog(Array.isArray(catalog) ? catalog : [])
-      if (!toolName && Array.isArray(catalog) && catalog.length > 0) {
-        setToolName(catalog[0].name)
-      }
-    } catch (error) {
-      setErrorText(String((error as Error)?.message || error))
-    }
-  }, [aiApi, toolName])
 
   const loadSchema = useCallback(async () => {
     const res = await window.electronAPI.chat.getSchema({})
@@ -268,52 +283,35 @@ function AiAnalysisPage() {
   }, [currentConversationId, loadMessages])
 
   useEffect(() => {
-    if (activeTab === 'sql' && !sqlSchema) void loadSchema()
-    if (activeTab === 'tool' && toolCatalog.length === 0) void loadToolCatalog()
-  }, [activeTab, sqlSchema, loadSchema, toolCatalog.length, loadToolCatalog])
+    if (activeTab === 'sql' && !sqlSchema) {
+      void loadSchema()
+    }
+  }, [activeTab, sqlSchema, loadSchema])
 
   useEffect(() => {
-    const off = agentApi.onStream((chunk: AgentStreamChunk) => {
-      if (sqlRunIdRef.current && chunk.runId === sqlRunIdRef.current) {
-        if (chunk.type === 'content') {
-          setSqlGenerated((prev) => {
-            const next = `${prev}${chunk.content || ''}`
-            sqlGeneratedRef.current = next
-            return next
-          })
-        } else if (chunk.type === 'done') {
-          setSqlGenerating(false)
-          if (normalizeText(sqlGeneratedRef.current)) {
-            setSqlHistory((prev) => [sqlGeneratedRef.current.trim(), ...prev].slice(0, 30))
-          }
-          sqlRunIdRef.current = ''
-        } else if (chunk.type === 'error') {
-          setSqlGenerating(false)
-          setSqlError(chunk.error || 'SQL 生成失败')
-          sqlRunIdRef.current = ''
-        }
-        return
-      }
-      const conversationId = normalizeText(chunk.conversationId, currentConversationId)
-      if (!conversationId) return
-      appendChunk(conversationId, chunk)
-      if (chunk.type === 'done' || chunk.type === 'error' || chunk.isFinished) {
-        finishRun(conversationId)
-        void loadMessages(conversationId)
-        void loadConversations()
-      }
-    })
-    return () => off()
-  }, [agentApi, appendChunk, currentConversationId, finishRun, loadConversations, loadMessages])
+    const panel = messageContainerRef.current
+    if (!panel) return
+    const onScroll = () => {
+      const distance = panel.scrollHeight - panel.scrollTop - panel.clientHeight
+      setShowScrollBottom(distance > 64)
+    }
+    panel.addEventListener('scroll', onScroll)
+    onScroll()
+    return () => panel.removeEventListener('scroll', onScroll)
+  }, [messageContainerRef.current])
 
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [messages, runtimeState?.draft, runtimeState?.chunks.length])
+    const panel = messageContainerRef.current
+    if (!panel) return
+    panel.scrollTo({ top: panel.scrollHeight, behavior: 'smooth' })
+  }, [messages, runtimeState?.blocks.length, runtimeState?.draft])
 
   const ensureConversation = useCallback(async (): Promise<string> => {
     if (currentConversationId) return currentConversationId
     const created = await aiApi.createConversation({ title: '新的 AI 对话' })
-    if (!created.success || !created.conversationId) throw new Error(created.error || '创建会话失败')
+    if (!created.success || !created.conversationId) {
+      throw new Error(created.error || '创建会话失败')
+    }
     setCurrentConversationId(created.conversationId)
     await loadConversations()
     return created.conversationId
@@ -361,8 +359,10 @@ function AiAnalysisPage() {
   const handleSend = async () => {
     const text = normalizeText(input)
     if (!text) return
+
     setErrorText('')
     const conversationId = await ensureConversation()
+
     setMessages((prev) => ([
       ...prev,
       {
@@ -377,25 +377,37 @@ function AiAnalysisPage() {
       }
     ]))
     setInput('')
-    const run = await agentApi.runStream({
+
+    const run = agentApi.runStream({
       mode: 'chat',
       conversationId,
       userInput: text,
       assistantId: selectedAssistantId,
       activeSkillId: selectedSkillId || undefined,
       chatScope: scopeMode === 'session' ? 'private' : 'private'
+    }, (chunk) => {
+      appendChunk(conversationId, chunk)
     })
-    if (!run.success || !run.runId) {
-      setErrorText('启动失败')
-      return
+
+    startRun(conversationId, run.requestId)
+    const result = await run.promise
+    completeRun(conversationId, result.result || { error: result.error, canceled: false })
+
+    if (!result.success && !result.result?.canceled) {
+      setErrorText(result.error || '执行失败')
     }
-    startRun(conversationId, run.runId)
+
+    await loadMessages(conversationId)
+    await loadConversations()
   }
 
   const handleStop = async () => {
     if (!currentConversationId) return
-    await agentApi.abort({ runId: activeRunId || undefined, conversationId: currentConversationId })
-    finishRun(currentConversationId)
+    const requestId = runtimeState?.requestId || activeRequestId
+    if (!requestId) return
+    setErrorText('')
+    await agentApi.abort(requestId)
+    completeRun(currentConversationId, { canceled: true })
   }
 
   const handleExportConversation = async () => {
@@ -409,11 +421,6 @@ function AiAnalysisPage() {
     window.alert('会话 Markdown 已复制到剪贴板')
   }
 
-  const handleOpenLog = async () => {
-    const logPath = await window.electronAPI.log.getPath()
-    await window.electronAPI.shell.openPath(logPath)
-  }
-
   const handleGenerateSql = async () => {
     const prompt = normalizeText(sqlPrompt)
     if (!prompt) return
@@ -421,21 +428,35 @@ function AiAnalysisPage() {
     setSqlGenerated('')
     sqlGeneratedRef.current = ''
     setSqlError('')
+
     const target = extractSqlTarget(sqlSchema, sqlTargetKey)
-    const run = await agentApi.runStream({
+    const run = agentApi.runStream({
       mode: 'sql',
       userInput: prompt,
       sqlContext: {
         schemaText: sqlSchemaText,
         targetHint: target ? `${target.kind}:${target.path || ''}` : ''
       }
+    }, (chunk) => {
+      if (chunk.type === 'content') {
+        setSqlGenerated((prev) => {
+          const next = `${prev}${chunk.content || ''}`
+          sqlGeneratedRef.current = next
+          return next
+        })
+      }
     })
-    if (!run.success || !run.runId) {
-      setSqlGenerating(false)
-      setSqlError('SQL 生成失败')
+
+    const result = await run.promise
+    setSqlGenerating(false)
+    if (!result.success) {
+      setSqlError(result.error || 'SQL 生成失败')
       return
     }
-    sqlRunIdRef.current = run.runId
+
+    if (normalizeText(sqlGeneratedRef.current)) {
+      setSqlHistory((prev) => [sqlGeneratedRef.current.trim(), ...prev].slice(0, 30))
+    }
   }
 
   const handleExecuteSql = async () => {
@@ -478,54 +499,32 @@ function AiAnalysisPage() {
     URL.revokeObjectURL(url)
   }
 
-  const handleRunTool = async () => {
-    setToolRunning(true)
-    try {
-      const args = JSON.parse(toolArgsText || '{}')
-      const result = await aiApi.executeTool({ name: toolName, args })
-      setToolOutput(JSON.stringify(result, null, 2))
-    } catch (error) {
-      setToolOutput(String((error as Error)?.message || error))
-    } finally {
-      setToolRunning(false)
-    }
-  }
-
-  const groupedTools = useMemo(() => ({
-    core: toolCatalog.filter((item) => item.category === 'core'),
-    analysis: toolCatalog.filter((item) => item.category === 'analysis')
-  }), [toolCatalog])
-
   return (
-    <div className="ai-analysis-v2">
-      <header className="ai-header">
-        <div className="left">
+    <div className="ai-analysis-chatlab">
+      <header className="ai-topbar">
+        <div className="title-group">
           <Sparkles size={18} />
           <h1>AI Analysis</h1>
-          <span>Chat Explorer + SQL Lab + Tool Test</span>
+          <span>ChatLab 交互同构模式</span>
         </div>
-        <div className="tabs">
+        <div className="top-actions">
           <button type="button" className={activeTab === 'chat' ? 'active' : ''} onClick={() => setActiveTab('chat')}>
             <Bot size={14} />
-            Chat Explorer
+            AI Chat
           </button>
           <button type="button" className={activeTab === 'sql' ? 'active' : ''} onClick={() => setActiveTab('sql')}>
             <Database size={14} />
             SQL Lab
           </button>
-          <button type="button" className={activeTab === 'tool' ? 'active' : ''} onClick={() => setActiveTab('tool')}>
-            <SquareTerminal size={14} />
-            Tool Test
-          </button>
         </div>
       </header>
 
       {activeTab === 'chat' && (
-        <div className="chat-layout">
-          <aside className="conversation-panel">
-            <div className="panel-head">
+        <div className={`chat-shell ${showDataPanel ? 'with-data' : ''}`}>
+          <aside className="conversation-sidebar">
+            <div className="sidebar-head">
               <h3>会话</h3>
-              <button type="button" onClick={() => void handleCreateConversation()} title="新建">+</button>
+              <button type="button" onClick={() => void handleCreateConversation()} title="新建会话">+</button>
             </div>
             {loadingConversations ? (
               <div className="empty"><Loader2 className="spin" size={14} /> 加载中...</div>
@@ -542,9 +541,11 @@ function AiAnalysisPage() {
                       <strong>{conversation.title || '新的 AI 对话'}</strong>
                       <small>{formatDateTime(conversation.updatedAt)}</small>
                     </div>
-                    <div className="ops">
-                      <span onClick={(event) => { event.stopPropagation(); void handleRenameConversation(conversation.conversationId) }}>重命名</span>
-                      <span onClick={(event) => { event.stopPropagation(); void handleDeleteConversation(conversation.conversationId) }}><Trash2 size={12} /></span>
+                    <div className="ops" onClick={(event) => event.stopPropagation()}>
+                      <span onClick={() => void handleRenameConversation(conversation.conversationId)}>重命名</span>
+                      <span onClick={() => void handleDeleteConversation(conversation.conversationId)}>
+                        <Trash2 size={12} />
+                      </span>
                     </div>
                   </button>
                 ))}
@@ -553,9 +554,9 @@ function AiAnalysisPage() {
             )}
           </aside>
 
-          <section className="chat-main">
+          <section className="chat-main-panel">
             <div className="chat-toolbar">
-              <div className="row">
+              <div className="controls-row">
                 <label>助手</label>
                 <select value={selectedAssistantId} onChange={(event) => setSelectedAssistantId(event.target.value)}>
                   {assistants.map((assistant) => (
@@ -583,7 +584,17 @@ function AiAnalysisPage() {
                     placeholder={scopeMode === 'contact' ? '联系人昵称/账号' : '会话ID'}
                   />
                 )}
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => setShowDataPanel((prev) => !prev)}
+                  title={showDataPanel ? '隐藏数据面板' : '显示数据面板'}
+                >
+                  {showDataPanel ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
+                  数据源
+                </button>
               </div>
+
               {selectedAssistant?.presetQuestions?.length ? (
                 <div className="preset-row">
                   {selectedAssistant.presetQuestions.slice(0, 8).map((question) => (
@@ -593,69 +604,121 @@ function AiAnalysisPage() {
               ) : null}
             </div>
 
-            <div className="message-panel">
+            <div className="messages-wrap" ref={messageContainerRef}>
               {loadingMessages ? (
                 <div className="empty"><Loader2 className="spin" size={14} /> 加载消息...</div>
               ) : (
-                <div className="message-list">
+                <>
                   {messages.map((message) => (
-                    <div key={message.messageId} className={`msg ${message.role === 'user' ? 'user' : message.role}`}>
-                      <div className="head">{message.role === 'user' ? '你' : message.role === 'assistant' ? '助手' : message.role}</div>
-                      <div className="body">{message.content || '（空）'}</div>
-                    </div>
+                    <article key={message.messageId} className={`message-card ${message.role === 'user' ? 'user' : 'assistant'}`}>
+                      <header>
+                        <span>{message.role === 'user' ? '你' : '助手'}</span>
+                        <time>{formatDateTime(message.createdAt)}</time>
+                      </header>
+                      <div className="message-body">{message.content || '（空）'}</div>
+                      {message.role === 'assistant' && Array.isArray(message.toolTrace) && message.toolTrace.length > 0 ? (
+                        <details className="tool-trace">
+                          <summary>工具调用轨迹（{message.toolTrace.length}）</summary>
+                          <ul>
+                            {message.toolTrace.map((trace, index) => (
+                              <li key={`${message.messageId}-trace-${index}`}>
+                                {String(trace?.toolName || 'unknown')} · {String(trace?.status || 'unknown')} · {Number(trace?.durationMs || 0)}ms
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      ) : null}
+                    </article>
                   ))}
 
-                  {runtimeState?.running && runtimeState?.chunks?.length ? (
-                    <div className="runtime-cards">
-                      {runtimeState.chunks
-                        .filter((chunk) => chunk.type === 'tool_start' || chunk.type === 'tool_result' || chunk.type === 'error')
-                        .slice(-16)
-                        .map((chunk, index) => (
-                        <div key={`${chunk.runId}-${index}`} className={`chunk ${chunk.type}`}>
-                          <strong>{chunk.type}</strong>
-                          {chunk.toolName ? <span>{chunk.toolName}</span> : null}
-                          {chunk.content ? <pre>{chunk.content}</pre> : null}
-                          {chunk.type === 'tool_result' && chunk.toolResult !== undefined ? (
-                            <pre>{JSON.stringify(chunk.toolResult, null, 2)}</pre>
-                          ) : null}
-                          {chunk.error ? <span className="err">{chunk.error}</span> : null}
-                        </div>
-                      ))}
-                    </div>
+                  {runtimeState?.running ? (
+                    <article className="message-card assistant streaming">
+                      <header>
+                        <span>助手（实时）</span>
+                        <time>{runtimeState?.status?.phase || 'thinking'}</time>
+                      </header>
+                      <div className="message-body blocks">
+                        {(runtimeState?.blocks || []).map((block, index) => {
+                          if (block.type === 'text') {
+                            return <div key={`text-${index}`} className="text-block">{block.text}</div>
+                          }
+                          if (block.type === 'think') {
+                            if (!showThinkBlocks) return null
+                            return (
+                              <details key={`think-${index}`} className="think-block">
+                                <summary>
+                                  思考过程
+                                  {block.durationMs ? <small>{Math.max(0, block.durationMs)}ms</small> : null}
+                                </summary>
+                                <pre>{block.text}</pre>
+                              </details>
+                            )
+                          }
+                          return (
+                            <div key={`tool-${index}`} className={`tool-block ${block.tool.status}`}>
+                              <div className="line">
+                                <strong>{block.tool.name}</strong>
+                                <span>{block.tool.status}</span>
+                              </div>
+                              {block.tool.params ? (
+                                <pre>{JSON.stringify(block.tool.params, null, 2)}</pre>
+                              ) : null}
+                              {block.tool.result ? (
+                                <pre>{JSON.stringify(block.tool.result, null, 2)}</pre>
+                              ) : null}
+                            </div>
+                          )
+                        })}
+                        {runtimeState?.running ? (
+                          <span className="typing-cursor">|</span>
+                        ) : null}
+                      </div>
+                    </article>
                   ) : null}
-
-                  {runtimeState?.draft ? (
-                    <div className="msg assistant draft">
-                      <div className="head">助手（流式）</div>
-                      <div className="body">{runtimeState.draft}</div>
-                    </div>
-                  ) : null}
-
-                  <div ref={messageEndRef} />
-                </div>
+                </>
               )}
+
+              {showScrollBottom ? (
+                <button
+                  type="button"
+                  className="scroll-bottom"
+                  onClick={() => messageContainerRef.current?.scrollTo({ top: messageContainerRef.current.scrollHeight, behavior: 'smooth' })}
+                >
+                  <ChevronDown size={14} />
+                </button>
+              ) : null}
             </div>
 
-            <div className="footer-actions">
-              <button type="button" className="ghost" onClick={() => void loadConversations()}>
-                <RefreshCw size={14} />
-                刷新
-              </button>
-              <button type="button" className="ghost" onClick={() => void handleExportConversation()}>
-                <Download size={14} />
-                导出会话
-              </button>
-              <button type="button" className="ghost" onClick={() => void handleOpenLog()}>
-                <Search size={14} />
-                打开日志
-              </button>
+            <div className="status-row">
+              <div className="left">
+                <span>状态：{runtimeState?.status?.phase || 'idle'}</span>
+                {typeof runtimeState?.usage?.totalTokens === 'number' ? (
+                  <span>Tokens: {runtimeState?.usage?.totalTokens}</span>
+                ) : null}
+              </div>
+              <div className="right">
+                <button type="button" className="ghost" onClick={() => void loadConversations()}>
+                  <RefreshCw size={13} /> 刷新
+                </button>
+                <button type="button" className="ghost" onClick={() => void handleExportConversation()}>
+                  <Download size={13} /> 导出
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={!runtimeState?.running}
+                  onClick={() => void handleStop()}
+                >
+                  <CircleStop size={13} /> 停止
+                </button>
+              </div>
             </div>
 
             <div className="input-panel">
               <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="输入问题，支持 /技能 和 @成员"
+                placeholder="输入问题，支持 /技能 和 @成员，Ctrl/Cmd + Enter 发送"
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                     event.preventDefault()
@@ -691,22 +754,63 @@ function AiAnalysisPage() {
               )}
 
               <div className="input-actions">
-                <button type="button" className="primary" onClick={() => void handleSend()} disabled={runtimeState?.running}>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => void handleSend()}
+                  disabled={runtimeState?.running}
+                >
                   {runtimeState?.running ? <Loader2 className="spin" size={14} /> : <Send size={14} />}
                   发送
-                </button>
-                <button type="button" className="danger" onClick={() => void handleStop()} disabled={!runtimeState?.running}>
-                  <CircleStop size={14} />
-                  停止
                 </button>
               </div>
             </div>
           </section>
+
+          {showDataPanel ? (
+            <aside className="data-panel">
+              <header>
+                <h3>数据源面板</h3>
+                <span>{runtimeState?.sourceMessages?.length || 0} 条</span>
+              </header>
+
+              <section className="keywords">
+                <h4>关键词</h4>
+                <div className="chips">
+                  {(runtimeState?.currentKeywords || []).length ? (
+                    runtimeState?.currentKeywords.map((keyword) => (
+                      <span key={keyword}>{keyword}</span>
+                    ))
+                  ) : (
+                    <small>暂无</small>
+                  )}
+                </div>
+              </section>
+
+              <section className="sources">
+                <h4>引用消息</h4>
+                <div className="source-list">
+                  {(runtimeState?.sourceMessages || []).map((message) => (
+                    <article key={`${message.sessionId}-${message.localId}-${message.timestamp}`}>
+                      <header>
+                        <strong>{message.senderName || '未知成员'}</strong>
+                        <time>{formatDateTime((message.timestamp || 0) * 1000)}</time>
+                      </header>
+                      <p>{message.content}</p>
+                    </article>
+                  ))}
+                  {(runtimeState?.sourceMessages || []).length === 0 ? (
+                    <div className="empty">暂无检索来源</div>
+                  ) : null}
+                </div>
+              </section>
+            </aside>
+          ) : null}
         </div>
       )}
 
       {activeTab === 'sql' && (
-        <div className="sql-layout">
+        <div className="sql-shell">
           <aside className="schema-panel">
             <div className="panel-head">
               <h3>Schema</h3>
@@ -783,6 +887,7 @@ function AiAnalysisPage() {
                             }}
                           >
                             {column}
+                            {sqlSortBy === column ? (sqlSortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : null}
                           </th>
                         ))}
                       </tr>
@@ -814,61 +919,11 @@ function AiAnalysisPage() {
               <div className="history-list">
                 {sqlHistory.map((sql, index) => (
                   <button key={`sql-${index}`} type="button" onClick={() => setSqlGenerated(sql)}>
-                    {sql.slice(0, 120)}
+                    {sql.slice(0, 160)}
                   </button>
                 ))}
               </div>
             </div>
-          </section>
-        </div>
-      )}
-
-      {activeTab === 'tool' && (
-        <div className="tool-layout">
-          <aside className="tool-catalog">
-            <h3>工具目录</h3>
-            <h4>Core</h4>
-            <div className="tool-list">
-              {groupedTools.core.map((tool) => (
-                <button key={tool.name} type="button" className={toolName === tool.name ? 'active' : ''} onClick={() => setToolName(tool.name)}>
-                  {tool.name}
-                </button>
-              ))}
-            </div>
-            <h4>Analysis</h4>
-            <div className="tool-list">
-              {groupedTools.analysis.map((tool) => (
-                <button key={tool.name} type="button" className={toolName === tool.name ? 'active' : ''} onClick={() => setToolName(tool.name)}>
-                  {tool.name}
-                </button>
-              ))}
-            </div>
-          </aside>
-
-          <section className="tool-main">
-            <div className="tool-top">
-              <div>
-                <h3>{toolName || '请选择工具'}</h3>
-                <p>{toolCatalog.find((tool) => tool.name === toolName)?.description || '暂无描述'}</p>
-              </div>
-              <div className="actions">
-                <button type="button" onClick={() => void handleRunTool()} disabled={!toolName || toolRunning}>
-                  {toolRunning ? <Loader2 className="spin" size={14} /> : <Wrench size={14} />}
-                  执行
-                </button>
-                <button type="button" onClick={() => void aiApi.cancelToolTest({})}>
-                  <CircleStop size={14} />
-                  取消
-                </button>
-              </div>
-            </div>
-            <textarea
-              className="tool-args"
-              value={toolArgsText}
-              onChange={(event) => setToolArgsText(event.target.value)}
-              placeholder='{"keyword":"买车","limit":10}'
-            />
-            <pre className="tool-output">{toolOutput || '执行结果会显示在这里（超长内容可滚动查看）'}</pre>
           </section>
         </div>
       )}

@@ -1690,7 +1690,104 @@ function registerIpcHandlers() {
     aiAnalysisService.cancelToolTest(payload?.taskId)
   )
 
-  ipcMain.handle('agent:runStream', async (event, payload: {
+  ipcMain.handle('ai:getMessageContext', async (_, sessionId: string, messageIds: number | number[], contextSize?: number) => {
+    const connectResult = await ensureAiSqlLabConnected()
+    if (!connectResult.success) return []
+    return chatService.getMessageContextForAI(sessionId, messageIds, contextSize)
+  })
+  ipcMain.handle('ai:getSearchMessageContext', async (_, sessionId: string, messageIds: number[], contextBefore?: number, contextAfter?: number) => {
+    const connectResult = await ensureAiSqlLabConnected()
+    if (!connectResult.success) return []
+    return chatService.getSearchMessageContextForAI(sessionId, messageIds, contextBefore, contextAfter)
+  })
+  ipcMain.handle('ai:getRecentMessages', async (_, sessionId: string, filter?: { startTs?: number; endTs?: number }, limit?: number) => {
+    const connectResult = await ensureAiSqlLabConnected()
+    if (!connectResult.success) return { messages: [], total: 0 }
+    return chatService.getRecentMessagesForAI(sessionId, filter, limit)
+  })
+  ipcMain.handle('ai:getAllRecentMessages', async (_, sessionId: string, filter?: { startTs?: number; endTs?: number }, limit?: number) => {
+    const connectResult = await ensureAiSqlLabConnected()
+    if (!connectResult.success) return { messages: [], total: 0 }
+    return chatService.getRecentMessagesForAI(sessionId, filter, limit)
+  })
+  ipcMain.handle('ai:getConversationBetween', async (
+    _,
+    sessionId: string,
+    memberId1: number,
+    memberId2: number,
+    filter?: { startTs?: number; endTs?: number },
+    limit?: number
+  ) => {
+    const connectResult = await ensureAiSqlLabConnected()
+    if (!connectResult.success) {
+      return { messages: [], total: 0, member1Name: '', member2Name: '' }
+    }
+    return chatService.getConversationBetweenForAI(sessionId, memberId1, memberId2, filter, limit)
+  })
+  ipcMain.handle('ai:getMessagesBefore', async (
+    _,
+    sessionId: string,
+    beforeId: number,
+    limit?: number,
+    filter?: { startTs?: number; endTs?: number },
+    senderId?: number,
+    keywords?: string[]
+  ) => {
+    const connectResult = await ensureAiSqlLabConnected()
+    if (!connectResult.success) return { messages: [], hasMore: false }
+    return chatService.getMessagesBeforeForAI(sessionId, beforeId, limit, filter, senderId, keywords)
+  })
+  ipcMain.handle('ai:getMessagesAfter', async (
+    _,
+    sessionId: string,
+    afterId: number,
+    limit?: number,
+    filter?: { startTs?: number; endTs?: number },
+    senderId?: number,
+    keywords?: string[]
+  ) => {
+    const connectResult = await ensureAiSqlLabConnected()
+    if (!connectResult.success) return { messages: [], hasMore: false }
+    return chatService.getMessagesAfterForAI(sessionId, afterId, limit, filter, senderId, keywords)
+  })
+  ipcMain.handle('ai:searchSessions', async (
+    _,
+    sessionId: string,
+    keywords?: string[],
+    timeFilter?: { startTs?: number; endTs?: number },
+    limit?: number,
+    previewCount?: number
+  ) => {
+    const connectResult = await ensureAiSqlLabConnected()
+    if (!connectResult.success) return []
+    return chatService.searchSessionsForAI(sessionId, keywords, timeFilter, limit, previewCount)
+  })
+  ipcMain.handle('ai:getSessionMessages', async (_, sessionId: string, chatSessionId: string | number, limit?: number) => {
+    const connectResult = await ensureAiSqlLabConnected()
+    if (!connectResult.success) return null
+    return chatService.getSessionMessagesForAI(sessionId, chatSessionId, limit)
+  })
+  ipcMain.handle('ai:getSessionSummaries', async (
+    _,
+    sessionId: string,
+    options?: { sessionIds?: string[]; limit?: number; previewCount?: number }
+  ) => {
+    const connectResult = await ensureAiSqlLabConnected()
+    if (!connectResult.success) return []
+    return chatService.getSessionSummariesForAI(sessionId, options)
+  })
+
+  const agentRequestToRunId = new Map<string, string>()
+  const terminatedAgentRequests = new Set<string>()
+  const markAgentRequestTerminated = (requestId: string) => {
+    const normalized = String(requestId || '').trim()
+    if (!normalized) return
+    terminatedAgentRequests.add(normalized)
+    setTimeout(() => {
+      terminatedAgentRequests.delete(normalized)
+    }, 120_000)
+  }
+  ipcMain.handle('agent:runStream', async (event, requestId: string, payload: {
     mode?: 'chat' | 'sql'
     conversationId?: string
     userInput: string
@@ -1699,19 +1796,106 @@ function registerIpcHandlers() {
     chatScope?: 'group' | 'private'
     sqlContext?: { schemaText?: string; targetHint?: string }
   }) => {
-    return aiAgentService.runStream(payload, {
+    const normalizedRequestId = String(requestId || '').trim() || randomUUID()
+    terminatedAgentRequests.delete(normalizedRequestId)
+    const startResult = await aiAgentService.runStream(payload, {
       onChunk: (chunk) => {
+        if (terminatedAgentRequests.has(normalizedRequestId)) return
         try {
-          event.sender.send('agent:stream', chunk)
+          event.sender.send('agent:streamChunk', { requestId: normalizedRequestId, chunk })
+        } catch {
+          // ignore sender errors
+        }
+      },
+      onFinished: (result) => {
+        if (terminatedAgentRequests.has(normalizedRequestId)) {
+          agentRequestToRunId.delete(normalizedRequestId)
+          terminatedAgentRequests.delete(normalizedRequestId)
+          return
+        }
+        try {
+          if (!result.success) {
+            event.sender.send('agent:error', {
+              requestId: normalizedRequestId,
+              error: result.error || '执行失败',
+              result: {
+                success: false,
+                runId: result.runId,
+                conversationId: result.conversationId,
+                error: result.error || ''
+              }
+            })
+          } else {
+            event.sender.send('agent:complete', {
+              requestId: normalizedRequestId,
+              result: {
+                success: true,
+                runId: result.runId,
+                conversationId: result.conversationId,
+                error: ''
+              }
+            })
+          }
+        } catch {
+          // ignore sender errors
+        } finally {
+          agentRequestToRunId.delete(normalizedRequestId)
+        }
+      }
+    })
+    if (startResult.success && startResult.runId) {
+      agentRequestToRunId.set(normalizedRequestId, startResult.runId)
+    }
+    return {
+      success: Boolean(startResult.success),
+      requestId: normalizedRequestId
+    }
+  })
+  ipcMain.handle('agent:abort', async (event, payload: string | { requestId?: string; runId?: string; conversationId?: string }) => {
+    if (typeof payload === 'string') {
+      const requestId = payload
+      const runId = agentRequestToRunId.get(requestId) || payload
+      markAgentRequestTerminated(requestId)
+      const result = await aiAgentService.abort({ runId })
+      if (result?.success) {
+        agentRequestToRunId.delete(requestId)
+        try {
+          event.sender.send('agent:cancel', { requestId, runId })
         } catch {
           // ignore sender errors
         }
       }
-    })
+      return result
+    }
+    const requestId = String(payload?.requestId || '').trim()
+    if (requestId) {
+      const runId = agentRequestToRunId.get(requestId)
+      if (runId) {
+        markAgentRequestTerminated(requestId)
+        agentRequestToRunId.delete(requestId)
+        const result = await aiAgentService.abort({ runId })
+        if (result?.success) {
+          try {
+            event.sender.send('agent:cancel', { requestId, runId })
+          } catch {
+            // ignore sender errors
+          }
+        }
+        return result
+      }
+    }
+    const result = await aiAgentService.abort(payload || {})
+    if (result?.success && requestId) {
+      markAgentRequestTerminated(requestId)
+      agentRequestToRunId.delete(requestId)
+      try {
+        event.sender.send('agent:cancel', { requestId, runId: String(payload?.runId || '') })
+      } catch {
+        // ignore sender errors
+      }
+    }
+    return result
   })
-  ipcMain.handle('agent:abort', async (_, payload: { runId?: string; conversationId?: string }) =>
-    aiAgentService.abort(payload || {})
-  )
 
   ipcMain.handle('assistant:getAll', async () => aiAssistantService.getAll())
   ipcMain.handle('assistant:getConfig', async (_, id: string) => aiAssistantService.getConfig(id))
@@ -1777,49 +1961,6 @@ function registerIpcHandlers() {
     }
     return wcdbService.sqlLabExecuteReadonly(payload)
   })
-
-  // 兼容层：旧 aiAnalysis API 转调新实现
-  ipcMain.handle('aiAnalysis:listConversations', async (_, payload?: { page?: number; pageSize?: number }) =>
-    aiAnalysisService.listConversations(payload?.page, payload?.pageSize)
-  )
-  ipcMain.handle('aiAnalysis:createConversation', async (_, payload?: { title?: string }) =>
-    aiAnalysisService.createConversation(payload?.title || '')
-  )
-  ipcMain.handle('aiAnalysis:deleteConversation', async (_, conversationId: string) =>
-    aiAnalysisService.deleteConversation(conversationId)
-  )
-  ipcMain.handle('aiAnalysis:listMessages', async (_, payload: { conversationId: string; limit?: number }) =>
-    aiAnalysisService.listMessages(payload.conversationId, payload.limit)
-  )
-  ipcMain.handle('aiAnalysis:sendMessage', async (event, payload: {
-    conversationId: string
-    userInput: string
-    options?: { parentMessageId?: string; persistUserMessage?: boolean; assistantId?: string; activeSkillId?: string }
-  }) =>
-    aiAnalysisService.sendMessage(payload.conversationId, payload.userInput, payload.options, {
-      onRunEvent: (runEvent) => {
-        try {
-          event.sender.send('aiAnalysis:runEvent', runEvent)
-        } catch {
-          // ignore sender errors
-        }
-      }
-    })
-  )
-  ipcMain.handle('aiAnalysis:retryMessage', async (event, payload: { conversationId: string; userMessageId?: string }) =>
-    aiAnalysisService.retryMessage(payload, {
-      onRunEvent: (runEvent) => {
-        try {
-          event.sender.send('aiAnalysis:runEvent', runEvent)
-        } catch {
-          // ignore sender errors
-        }
-      }
-    })
-  )
-  ipcMain.handle('aiAnalysis:abortRun', async (_, payload: { runId?: string; conversationId?: string }) =>
-    aiAnalysisService.abortRun(payload || {})
-  )
 
   ipcMain.handle('config:clear', async () => {
     if (isLaunchAtStartupSupported() && getSystemLaunchAtStartup()) {

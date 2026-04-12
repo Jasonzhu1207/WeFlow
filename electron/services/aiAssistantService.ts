@@ -40,16 +40,16 @@ presetQuestions:
   - 帮我总结一下最近一周的重要聊天
   - 帮我找一下关于“旅游”的讨论
 allowedBuiltinTools:
-  - ai_query_time_window_activity
-  - ai_query_session_candidates
-  - ai_query_session_glimpse
-  - ai_query_timeline
-  - ai_fetch_message_briefs
+  - get_time_stats
+  - search_sessions
+  - get_recent_messages
+  - search_messages
+  - get_message_context
   - ai_list_voice_messages
   - ai_transcribe_voice_messages
-  - ai_query_topic_stats
-  - ai_query_source_refs
-  - ai_query_top_contacts
+  - get_chat_overview
+  - get_session_summaries
+  - get_member_stats
 ---
 
 你是 WeFlow 的全局聊天分析助手。请使用工具获取证据，给出简洁、准确、可执行的结论。
@@ -70,16 +70,16 @@ presetQuestions:
   - Who are the most active contacts?
   - Summarize my key chat topics this week
 allowedBuiltinTools:
-  - ai_query_time_window_activity
-  - ai_query_session_candidates
-  - ai_query_session_glimpse
-  - ai_query_timeline
-  - ai_fetch_message_briefs
+  - get_time_stats
+  - search_sessions
+  - get_recent_messages
+  - search_messages
+  - get_message_context
   - ai_list_voice_messages
   - ai_transcribe_voice_messages
-  - ai_query_topic_stats
-  - ai_query_source_refs
-  - ai_query_top_contacts
+  - get_chat_overview
+  - get_session_summaries
+  - get_member_stats
 ---
 
 You are WeFlow's global chat analysis assistant.
@@ -95,16 +95,16 @@ presetQuestions:
   - 一番アクティブな相手は誰？
   - 今週の重要な会話を要約して
 allowedBuiltinTools:
-  - ai_query_time_window_activity
-  - ai_query_session_candidates
-  - ai_query_session_glimpse
-  - ai_query_timeline
-  - ai_fetch_message_briefs
+  - get_time_stats
+  - search_sessions
+  - get_recent_messages
+  - search_messages
+  - get_message_context
   - ai_list_voice_messages
   - ai_transcribe_voice_messages
-  - ai_query_topic_stats
-  - ai_query_source_refs
-  - ai_query_top_contacts
+  - get_chat_overview
+  - get_session_summaries
+  - get_member_stats
 ---
 
 あなたは WeFlow のグローバルチャット分析アシスタントです。
@@ -231,16 +231,16 @@ function toMarkdown(config: AssistantConfigFull): string {
 
 function defaultBuiltinToolCatalog(): Array<{ name: string; category: AssistantToolCategory }> {
   return [
-    { name: 'ai_query_time_window_activity', category: 'core' },
-    { name: 'ai_query_session_candidates', category: 'core' },
-    { name: 'ai_query_session_glimpse', category: 'core' },
-    { name: 'ai_query_timeline', category: 'core' },
-    { name: 'ai_fetch_message_briefs', category: 'core' },
+    { name: 'get_time_stats', category: 'core' },
+    { name: 'search_sessions', category: 'core' },
+    { name: 'get_recent_messages', category: 'core' },
+    { name: 'search_messages', category: 'core' },
+    { name: 'get_message_context', category: 'core' },
     { name: 'ai_list_voice_messages', category: 'core' },
     { name: 'ai_transcribe_voice_messages', category: 'core' },
-    { name: 'ai_query_topic_stats', category: 'analysis' },
-    { name: 'ai_query_source_refs', category: 'analysis' },
-    { name: 'ai_query_top_contacts', category: 'analysis' },
+    { name: 'get_chat_overview', category: 'analysis' },
+    { name: 'get_session_summaries', category: 'analysis' },
+    { name: 'get_member_stats', category: 'analysis' },
     { name: 'activate_skill', category: 'analysis' }
   ]
 }

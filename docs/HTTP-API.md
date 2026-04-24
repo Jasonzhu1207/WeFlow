@@ -74,14 +74,14 @@ GET /api/v1/push/messages
 - 需要先在设置页开启 `HTTP API 服务`
 - 同时需要开启 `主动推送`
 - 响应类型为 `text/event-stream`
-- 新消息事件名固定为 `message.new`
-- 建议接收端按 `messageKey` 去重
+- 事件名包含 `message.new` 和 `message.revoke`
+- 建议接收端按 `event + rawid` 去重
 
 ### 事件字段
 
 - `event`
 - `sessionId`
-- `messageKey`
+- `rawid`
 - `avatarUrl`
 - `sourceName`
 - `groupName`（仅群聊）
@@ -98,7 +98,14 @@ curl -N "http://127.0.0.1:5031/api/v1/push/messages?access_token=YOUR_TOKEN
 
 ```text
 event: message.new
-data: {"event":"message.new","sessionId":"xxx@chatroom","messageKey":"server:123456:1760000123:1760000123000:321:wxid_member:1","avatarUrl":"https://example.com/group.jpg","sourceName":"李四","groupName":"项目群","content":"[图片]","timestamp":1760000123}
+data: {"event":"message.new","sessionId":"xxx@chatroom","sessionType":"group","rawid":"1234567890123456789","avatarUrl":"https://example.com/group.jpg","sourceName":"李四","groupName":"项目群","content":"[图片]","timestamp":1760000123}
+```
+
+撤回事件示例：
+
+```text
+event: message.revoke
+data: {"event":"message.revoke","sessionId":"wxid_xxx","sessionType":"other","rawid":"1234567890123456789","avatarUrl":"https://example.com/avatar.jpg","sourceName":"张三","content":"对方撤回了一条消息（rawid：1234567890123456789） 内容为“你好”","timestamp":1760000180}
 ```
 
 ---

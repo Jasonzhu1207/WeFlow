@@ -4120,16 +4120,16 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
 
       <div className="form-group">
         <label>推送内容</label>
-        <span className="form-hint">SSE 事件名为 `message.new`；私聊推送 `avatarUrl/sourceName/content/timestamp`，群聊额外附带 `groupName`，其中 `timestamp` 为秒级 Unix 时间戳</span>
+        <span className="form-hint">SSE 事件名包含 `message.new` 和 `message.revoke`；私聊推送 `rawid/avatarUrl/sourceName/content/timestamp`，群聊额外附带 `groupName`，其中 `timestamp` 为秒级 Unix 时间戳</span>
         <div className="api-docs">
           <div className="api-item">
             <div className="api-endpoint">
               <span className="method get">GET</span>
               <code>{`http://${httpApiHost}:${httpApiPort}/api/v1/push/messages`}</code>
             </div>
-            <p className="api-desc">通过 SSE 长连接接收消息事件，建议接收端按 `messageKey` 去重。</p>
+            <p className="api-desc">通过 SSE 长连接接收消息事件，建议接收端按 `event + rawid` 去重。</p>
             <div className="api-params">
-              {['event', 'sessionId', 'sessionType', 'messageKey', 'avatarUrl', 'sourceName', 'groupName?', 'content', 'timestamp'].map((param) => (
+              {['event', 'sessionId', 'sessionType', 'rawid', 'avatarUrl', 'sourceName', 'groupName?', 'content', 'timestamp'].map((param) => (
                 <span key={param} className="param">
                   <code>{param}</code>
                 </span>

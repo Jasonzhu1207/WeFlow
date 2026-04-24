@@ -290,7 +290,8 @@ class HttpService {
   broadcastMessagePush(payload: Record<string, unknown>): void {
     if (!this.running) return
     const eventId = this.nextMessagePushEventId()
-    const eventBody = `id: ${eventId}\nevent: message.new\ndata: ${JSON.stringify(payload)}\n\n`
+    const eventName = this.getMessagePushEventName(payload)
+    const eventBody = `id: ${eventId}\nevent: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`
     this.rememberMessagePushEvent(eventId, eventBody)
     if (this.messagePushClients.size === 0) return
 
@@ -306,6 +307,11 @@ class HttpService {
         try { client.end() } catch {}
       }
     }
+  }
+
+  private getMessagePushEventName(payload: Record<string, unknown>): string {
+    const eventName = String(payload?.event || '').trim()
+    return /^[a-z0-9._-]+$/i.test(eventName) ? eventName : 'message.new'
   }
 
   async autoStart(): Promise<void> {

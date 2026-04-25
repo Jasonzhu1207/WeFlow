@@ -21,6 +21,76 @@ export interface SocialSaveWeiboCookieResult {
   error?: string
 }
 
+export interface BackupProgress {
+  phase: 'preparing' | 'scanning' | 'exporting' | 'packing' | 'inspecting' | 'restoring' | 'done' | 'failed'
+  message: string
+  current?: number
+  total?: number
+  detail?: string
+}
+
+export interface BackupOptions {
+  includeImages?: boolean
+  includeVideos?: boolean
+  includeFiles?: boolean
+}
+
+export interface BackupManifest {
+  version: 1
+  type: 'weflow-db-snapshots'
+  createdAt: string
+  appVersion: string
+  source: {
+    wxid: string
+    dbRoot: string
+  }
+  options?: BackupOptions
+  databases: Array<{
+    id: string
+    kind: 'session' | 'contact' | 'emoticon' | 'message' | 'media' | 'sns'
+    dbPath: string
+    relativePath: string
+    tables: Array<{
+      name: string
+      snapshotPath: string
+      rows: number
+      columns: number
+      schemaSql?: string
+    }>
+  }>
+  resources?: {
+    images?: Array<{
+      kind: 'image' | 'video' | 'file'
+      id: string
+      md5?: string
+      sessionId?: string
+      createTime?: number
+      sourceFileName?: string
+      archivePath: string
+      targetRelativePath: string
+      ext?: string
+      size?: number
+    }>
+    videos?: Array<{
+      kind: 'image' | 'video' | 'file'
+      id: string
+      md5?: string
+      sourceFileName?: string
+      archivePath: string
+      targetRelativePath: string
+      size?: number
+    }>
+    files?: Array<{
+      kind: 'image' | 'video' | 'file'
+      id: string
+      sourceFileName?: string
+      archivePath: string
+      targetRelativePath: string
+      size?: number
+    }>
+  }
+}
+
 export interface ElectronAPI {
   window: {
     minimize: () => void
@@ -157,6 +227,27 @@ export interface ElectronAPI {
     open: (dbPath: string, hexKey: string, wxid: string) => Promise<boolean>
     close: () => Promise<boolean>
 
+  }
+  backup: {
+    create: (payload: { outputPath: string; options?: BackupOptions }) => Promise<{
+      success: boolean
+      filePath?: string
+      manifest?: BackupManifest
+      error?: string
+    }>
+    inspect: (payload: { archivePath: string }) => Promise<{
+      success: boolean
+      manifest?: BackupManifest
+      error?: string
+    }>
+    restore: (payload: { archivePath: string }) => Promise<{
+      success: boolean
+      inserted?: number
+      ignored?: number
+      skipped?: number
+      error?: string
+    }>
+    onProgress: (callback: (progress: BackupProgress) => void) => () => void
   }
   key: {
     autoGetDbKey: () => Promise<{ success: boolean; key?: string; error?: string; logs?: string[] }>
@@ -1220,4 +1311,3 @@ declare global {
 }
 
 export { }
-

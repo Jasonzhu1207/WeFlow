@@ -33,6 +33,7 @@ import { messagePushService } from './services/messagePushService'
 import { insightService } from './services/insightService'
 import { normalizeWeiboCookieInput, weiboService } from './services/social/weiboService'
 import { bizService } from './services/bizService'
+import { backupService } from './services/backupService'
 
 // 配置自动更新
 autoUpdater.autoDownload = false
@@ -2178,6 +2179,18 @@ function registerIpcHandlers() {
     return true
   })
 
+  ipcMain.handle('backup:create', async (_, payload: { outputPath: string; options?: { includeImages?: boolean; includeVideos?: boolean; includeFiles?: boolean } }) => {
+    return backupService.createBackup(payload.outputPath, payload.options)
+  })
+
+  ipcMain.handle('backup:inspect', async (_, payload: { archivePath: string }) => {
+    return backupService.inspectBackup(payload.archivePath)
+  })
+
+  ipcMain.handle('backup:restore', async (_, payload: { archivePath: string }) => {
+    return backupService.restoreBackup(payload.archivePath)
+  })
+
 
 
   // 聊天相关
@@ -3995,5 +4008,4 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
-
 

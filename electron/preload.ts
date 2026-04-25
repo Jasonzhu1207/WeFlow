@@ -154,6 +154,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   },
 
+  backup: {
+    create: (payload: { outputPath: string; options?: { includeImages?: boolean; includeVideos?: boolean; includeFiles?: boolean } }) => ipcRenderer.invoke('backup:create', payload),
+    inspect: (payload: { archivePath: string }) => ipcRenderer.invoke('backup:inspect', payload),
+    restore: (payload: { archivePath: string }) => ipcRenderer.invoke('backup:restore', payload),
+    onProgress: (callback: (progress: any) => void) => {
+      const listener = (_: unknown, progress: any) => callback(progress)
+      ipcRenderer.on('backup:progress', listener)
+      return () => ipcRenderer.removeListener('backup:progress', listener)
+    }
+  },
+
   // 密钥获取
   key: {
     autoGetDbKey: () => ipcRenderer.invoke('key:autoGetDbKey'),

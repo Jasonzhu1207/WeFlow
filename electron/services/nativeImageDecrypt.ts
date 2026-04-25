@@ -10,6 +10,7 @@ type NativeDecryptResult = {
 
 type NativeAddon = {
   decryptDatNative: (inputPath: string, xorKey: number, aesKey?: string) => NativeDecryptResult
+  encryptDatNative?: (inputPath: string, xorKey: number, aesKey?: string) => Buffer
 }
 
 let cachedAddon: NativeAddon | null | undefined
@@ -104,6 +105,22 @@ export function decryptDatViaNative(
       : ''
     const ext = rawExt ? (rawExt.startsWith('.') ? rawExt : `.${rawExt}`) : ''
     return { data: result.data, ext, isWxgf }
+  } catch {
+    return null
+  }
+}
+
+export function encryptDatViaNative(
+  inputPath: string,
+  xorKey: number,
+  aesKey?: string
+): Buffer | null {
+  const addon = loadAddon()
+  if (!addon || typeof addon.encryptDatNative !== 'function') return null
+
+  try {
+    const result = addon.encryptDatNative(inputPath, xorKey, aesKey)
+    return Buffer.isBuffer(result) ? result : null
   } catch {
     return null
   }

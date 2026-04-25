@@ -2045,6 +2045,12 @@ class HttpService {
    * 获取消息内容
    */
   private getMessageContent(msg: Message): string | null {
+    const normalizeTextContent = (value: string | null | undefined): string | null => {
+      const text = String(value || '')
+      if (!text) return null
+      return text.replace(/^[\s]*([a-zA-Z0-9_@-]+):(?!\/\/)(?:\s*(?:\r?\n|<br\s*\/?>)\s*|\s*)/i, '').trim()
+    }
+
     if (msg.localType === 49) {
       return this.getType49Content(msg)
     }
@@ -2057,7 +2063,7 @@ class HttpService {
     // 根据类型返回占位符
     switch (msg.localType) {
       case 1:
-        return msg.rawContent || null
+        return normalizeTextContent(msg.parsedContent || msg.rawContent)
       case 3:
         return '[图片]'
       case 34:
@@ -2073,7 +2079,7 @@ class HttpService {
       case 49:
         return this.getType49Content(msg)
       default:
-        return msg.rawContent || null
+        return normalizeTextContent(msg.parsedContent || msg.rawContent) || null
     }
   }
 

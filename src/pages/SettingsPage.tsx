@@ -195,6 +195,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const [launchAtStartup, setLaunchAtStartup] = useState(false)
   const [launchAtStartupSupported, setLaunchAtStartupSupported] = useState(isWindows || isMac)
   const [launchAtStartupReason, setLaunchAtStartupReason] = useState('')
+  const [silentStartup, setSilentStartup] = useState(false)
   const [windowCloseBehavior, setWindowCloseBehavior] = useState<configService.WindowCloseBehavior>('ask')
   const [quoteLayout, setQuoteLayout] = useState<configService.QuoteLayout>('quote-top')
   const [updateChannel, setUpdateChannel] = useState<configService.UpdateChannel>('stable')
@@ -222,6 +223,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const [isFetchingImageKey, setIsFetchingImageKey] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isUpdatingLaunchAtStartup, setIsUpdatingLaunchAtStartup] = useState(false)
+  const [isUpdatingSilentStartup, setIsUpdatingSilentStartup] = useState(false)
   const [appVersion, setAppVersion] = useState('')
   const [message, setMessage] = useState<{ text: string; success: boolean } | null>(null)
   const [showDecryptKey, setShowDecryptKey] = useState(false)
@@ -445,6 +447,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
       const savedMessagePushFilterList = await configService.getMessagePushFilterList()
       const contactsResult = await window.electronAPI.chat.getContacts({ lite: true })
       const savedLaunchAtStartupStatus = await window.electronAPI.app.getLaunchAtStartupStatus()
+      const savedSilentStartup = await configService.getSilentStartup()
       const savedWindowCloseBehavior = await configService.getWindowCloseBehavior()
       const savedQuoteLayout = await configService.getQuoteLayout()
       const savedUpdateChannel = await configService.getUpdateChannel()
@@ -502,6 +505,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
       setLaunchAtStartup(savedLaunchAtStartupStatus.enabled)
       setLaunchAtStartupSupported(savedLaunchAtStartupStatus.supported)
       setLaunchAtStartupReason(savedLaunchAtStartupStatus.reason || '')
+      setSilentStartup(savedSilentStartup)
       setWindowCloseBehavior(savedWindowCloseBehavior)
       setQuoteLayout(savedQuoteLayout)
       if (savedUpdateChannel) {
@@ -612,6 +616,21 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
       showMessage(`设置开机自启动失败: ${e?.message || String(e)}`, false)
     } finally {
       setIsUpdatingLaunchAtStartup(false)
+    }
+  }
+
+  const handleSilentStartupChange = async (enabled: boolean) => {
+    if (isUpdatingSilentStartup) return
+
+    try {
+      setIsUpdatingSilentStartup(true)
+      await configService.setSilentStartup(enabled)
+      setSilentStartup(enabled)
+      showMessage(enabled ? '已开启静默启动' : '已关闭静默启动', true)
+    } catch (e: any) {
+      showMessage(`设置静默启动失败: ${e?.message || String(e)}`, false)
+    } finally {
+      setIsUpdatingSilentStartup(false)
     }
   }
 
@@ -1675,6 +1694,35 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
               disabled={!launchAtStartupSupported || isUpdatingLaunchAtStartup}
               onChange={(e) => {
                 void handleLaunchAtStartupChange(e.target.checked)
+              }}
+            />
+            <span className="switch-slider" />
+          </label>
+        </div>
+      </div>
+
+      <div className="divider" />
+
+      <div className="form-group">
+        <label>静默启动</label>
+        <span className="form-hint">
+          开启后，无论手动启动还是开机自启动，都会先驻留到系统托盘，不主动显示主窗口。
+        </span>
+        <div className="log-toggle-line">
+          <span className="log-status">
+            {isUpdatingSilentStartup
+              ? '保存中...'
+              : (silentStartup ? '已开启' : '已关闭')}
+          </span>
+          <label className="switch" htmlFor="silent-startup-toggle">
+            <input
+              id="silent-startup-toggle"
+              className="switch-input"
+              type="checkbox"
+              checked={silentStartup}
+              disabled={isUpdatingSilentStartup}
+              onChange={(e) => {
+                void handleSilentStartupChange(e.target.checked)
               }}
             />
             <span className="switch-slider" />

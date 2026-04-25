@@ -748,6 +748,10 @@ const getWindowCloseBehavior = (): WindowCloseBehavior => {
   return behavior === 'tray' || behavior === 'quit' ? behavior : 'ask'
 }
 
+const isSilentStartupEnabled = (): boolean => {
+  return configService?.get('silentStartup') === true
+}
+
 const requestMainWindowCloseConfirmation = (win: BrowserWindow): void => {
   if (isClosePromptVisible) return
   isClosePromptVisible = true
@@ -3740,21 +3744,31 @@ function checkForUpdatesOnStartup() {
 }
 
 app.whenReady().then(async () => {
-  // 立即创建 Splash 窗口，确保用户尽快看到反馈
-  createSplashWindow()
+  // 先初始化配置，以便在启动早期判定是否需要静默启动
+  configService = new ConfigService()
+  applyAutoUpdateChannel('startup')
+  syncLaunchAtStartupPreference()
+  const onboardingDone = configService.get('onboardingDone') === true
+  const startInBackground = onboardingDone && isSilentStartupEnabled()
+  shouldShowMain = onboardingDone
 
-  // 等待 Splash 页面加载完成后再推送进度
-  if (splashWindow) {
-    await new Promise<void>((resolve) => {
-      if (splashWindow!.webContents.isLoading()) {
-        splashWindow!.webContents.once('did-finish-load', () => resolve())
-      } else {
-        resolve()
-      }
-    })
-    splashWindow.webContents
-      .executeJavaScript(`setVersion(${JSON.stringify(app.getVersion())})`)
-      .catch(() => {})
+  if (!startInBackground) {
+    // 非静默模式下显示 Splash，提供启动反馈
+    createSplashWindow()
+
+    // 等待 Splash 页面加载完成后再推送进度
+    if (splashWindow) {
+      await new Promise<void>((resolve) => {
+        if (splashWindow!.webContents.isLoading()) {
+          splashWindow!.webContents.once('did-finish-load', () => resolve())
+        } else {
+          resolve()
+        }
+      })
+      splashWindow.webContents
+        .executeJavaScript(`setVersion(${JSON.stringify(app.getVersion())})`)
+        .catch(() => {})
+    }
   }
 
   const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -3783,13 +3797,7 @@ app.whenReady().then(async () => {
     })
   }
 
-  // 初始化配置服务
   updateSplashProgress(5, '正在加载配置...')
-  configService = new ConfigService()
-  applyAutoUpdateChannel('startup')
-  syncLaunchAtStartupPreference()
-  const onboardingDone = configService.get('onboardingDone') === true
-  shouldShowMain = onboardingDone
 
   // 将用户主题配置推送给 Splash 窗口
   if (splashWindow && !splashWindow.isDestroyed()) {
@@ -3956,6 +3964,8 @@ app.whenReady().then(async () => {
 
   if (!onboardingDone) {
     createOnboardingWindow()
+  } else if (startInBackground && tray) {
+    mainWindow?.hide()
   } else {
     mainWindow?.show()
   }

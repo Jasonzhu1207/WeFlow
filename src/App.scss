@@ -1,11 +1,10 @@
 .app-container {
   position: relative;
   display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 220px),
-    var(--bg-primary);
+  background: var(--bg-primary);
   color: var(--text-primary);
 }
 
@@ -23,6 +22,7 @@
 .main-layout {
   display: flex;
   flex: 1;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
 }
@@ -30,9 +30,10 @@
 .content {
   position: relative;
   flex: 1;
+  min-height: 0;
   min-width: 0;
   overflow: auto;
-  padding: 18px;
+  padding: 16px 18px 18px;
   background: transparent;
 }
 

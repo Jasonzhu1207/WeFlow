@@ -4,10 +4,8 @@
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 42%),
-    var(--bg-gradient);
+  border-radius: 8px;
+  background: #ffffff;
 }
 
 .home-hero {
@@ -27,9 +25,10 @@
 .hero-title {
   margin: 0;
   color: var(--text-primary);
+  font-family: "Douyin Sans", Inter, system-ui, sans-serif;
   font-size: clamp(48px, 9vw, 72px);
-  font-weight: 400;
-  letter-spacing: -2.16px;
+  font-weight: 700;
+  letter-spacing: 0;
   line-height: 1.08;
 }
 
@@ -59,14 +58,14 @@
   padding: 14px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  background: var(--bg-secondary);
+  background: #ffffff;
   color: var(--text-secondary);
   text-align: left;
   box-shadow: var(--shadow-sm);
 }
 
 .home-highlight svg {
-  color: var(--primary);
+  color: var(--accent-orange);
 }
 
 .home-highlight span {

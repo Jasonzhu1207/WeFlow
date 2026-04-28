@@ -49,7 +49,7 @@
     height: 100%;
     background: var(--primary-gradient);
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 10px rgba(139, 115, 85, 0.3);
+    box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.2);
   }
 
   .progress-percent {
@@ -438,8 +438,8 @@
     }
 
     &.active {
-      border-color: rgba(7, 193, 96, 0.4);
-      background: rgba(7, 193, 96, 0.08);
+      border-color: rgba(var(--primary-rgb), 0.32);
+      background: rgba(var(--primary-rgb), 0.08);
     }
 
     input {

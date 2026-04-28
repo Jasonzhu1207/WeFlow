@@ -1,123 +1,68 @@
 .confirm-dialog-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
-  animation: fadeIn 0.2s ease-out;
-
-  .confirm-dialog {
-    width: 480px;
-    background: var(--bg-primary);
-    border-radius: 20px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    position: relative;
-    animation: slideUp 0.2s ease-out;
-    overflow: hidden;
-
-    .close-btn {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      background: rgba(0, 0, 0, 0.05);
-      border: none;
-      color: var(--text-secondary);
-      cursor: pointer;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s;
-
-      &:hover {
-        background: rgba(0, 0, 0, 0.1);
-        color: var(--text-primary);
-      }
-    }
-
-    .dialog-title {
-      padding: 40px 40px 16px;
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .dialog-content {
-      padding: 0 40px 24px;
-
-      p {
-        font-size: 15px;
-        color: var(--text-primary);
-        line-height: 1.6;
-        margin: 0 0 16px 0;
-
-        &:last-child {
-          margin-bottom: 0;
-        }
-      }
-    }
-
-    .dialog-actions {
-      padding: 0 40px 40px;
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-
-      button {
-        padding: 12px 24px;
-        border-radius: 12px;
-        font-size: 15px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-        border: none;
-
-        &.btn-cancel {
-          background: var(--bg-tertiary);
-          color: var(--text-secondary);
-
-          &:hover {
-            background: var(--bg-hover);
-          }
-        }
-
-        &.btn-confirm {
-          background: var(--primary);
-          color: var(--on-primary);
-
-          &:hover {
-            background: var(--primary-hover);
-          }
-
-          &:active {
-            transform: scale(0.98);
-          }
-        }
-      }
-    }
-  }
+  padding: 24px;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.confirm-dialog {
+  position: relative;
+  width: min(480px, 100%);
+  overflow: hidden;
 }
 
-@keyframes slideUp {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+.confirm-dialog .close-btn,
+.update-dialog .close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.confirm-dialog .close-btn:hover,
+.update-dialog .close-btn:hover {
+  border-color: var(--border-color);
+  background: var(--cursor-surface-300);
+  color: var(--text-primary);
+}
+
+.confirm-dialog .dialog-title {
+  padding: 34px 34px 14px;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.11px;
+  line-height: 1.25;
+}
+
+.confirm-dialog .dialog-content {
+  padding: 0 34px 22px;
+}
+
+.confirm-dialog .dialog-content p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.confirm-dialog .dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 34px 34px;
 }

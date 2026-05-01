@@ -1,123 +1,153 @@
 .chat-analytics-hub-page {
-  min-height: 100%;
   display: flex;
+  flex-direction: column;
+  min-height: 100%;
   align-items: center;
   justify-content: center;
-  padding: 40px 24px;
-}
+  padding: 40px 20px;
+  background: var(--bg-primary);
 
-.chat-analytics-hub-content {
-  width: min(860px, 100%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-.chat-analytics-hub-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: var(--primary-light);
-  color: var(--primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.chat-analytics-hub-content h1 {
-  margin: 20px 0 12px;
-  font-size: 32px;
-  line-height: 1.2;
-  color: var(--text-primary);
-}
-
-.chat-analytics-hub-desc {
-  max-width: 620px;
-  margin: 0 0 32px;
-  color: var(--text-secondary);
-  font-size: 15px;
-  line-height: 1.7;
-}
-
-.chat-analytics-hub-grid {
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-
-.chat-analytics-entry-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  text-align: left;
-  gap: 14px;
-  min-height: 260px;
-  padding: 28px;
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
-  background:
-    linear-gradient(180deg, rgba(7, 193, 96, 0.08) 0%, rgba(7, 193, 96, 0.02) 100%),
-    var(--card-bg);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-
-  &:hover {
-    transform: translateY(-4px);
-    border-color: rgba(7, 193, 96, 0.35);
-    box-shadow: 0 20px 36px rgba(7, 193, 96, 0.12);
+  .hub-content {
+    width: 100%;
+    max-width: 800px;
+    animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 
-  .entry-card-icon {
-    width: 52px;
-    height: 52px;
-    border-radius: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(7, 193, 96, 0.12);
-    color: #07c160;
+  .hub-header {
+    text-align: center;
+    margin-bottom: 48px;
 
-    &.group {
-      background: rgba(24, 119, 242, 0.12);
-      color: #1877f2;
+    .hub-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--primary-light);
+      color: var(--primary);
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0 0 16px;
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 1.6;
     }
   }
 
-  .entry-card-header {
-    width: 100%;
+  .hub-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .hub-card {
+    position: relative;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
+    flex-direction: column;
+    padding: 32px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    outline: none;
 
-  h2 {
-    margin: 0;
-    font-size: 24px;
-    line-height: 1.2;
-  }
+    &:hover {
+      background: var(--bg-secondary);
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
 
-  p {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: 14px;
-    line-height: 1.7;
-  }
+      .card-icon {
+        background: var(--primary);
+        color: white;
+      }
+      .card-arrow {
+        color: var(--primary);
+        transform: translateX(4px);
+      }
+    }
 
-  .entry-card-cta {
-    margin-top: auto;
-    color: var(--primary);
-    font-size: 13px;
-    font-weight: 600;
+    .card-icon {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+      color: var(--primary);
+      border-radius: 12px;
+      margin-bottom: 24px;
+      transition: all 0.2s ease;
+
+      svg {
+        width: 24px;
+        height: 24px;
+      }
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-arrow {
+      color: var(--text-tertiary);
+      transition: all 0.2s ease;
+    }
+
+    p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin: 0 0 24px;
+      flex-grow: 1;
+    }
+
+    .card-action {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--primary);
+      margin-top: auto;
+    }
   }
 }
 
-@media (max-width: 900px) {
-  .chat-analytics-hub-grid {
-    grid-template-columns: 1fr;
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-analytics-hub-page {
+    .hub-cards {
+      grid-template-columns: 1fr;
+    }
   }
 }

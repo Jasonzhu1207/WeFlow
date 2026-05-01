@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite'
-import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
@@ -25,7 +24,6 @@ export default defineConfig({
     exclude: []
   },
   plugins: [
-    tailwindcss(),
     react(),
     electron([
       {

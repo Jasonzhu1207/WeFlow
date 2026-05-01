@@ -68,8 +68,9 @@
 .content {
   flex: 1;
   overflow: auto;
-  padding: 24px;
+  padding: 0;
   position: relative;
+  background: var(--bg-primary);
 }
 
 .export-keepalive-page {

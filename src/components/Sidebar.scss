@@ -1,14 +1,15 @@
 .sidebar {
-  width: 220px;
+  width: var(--sidebar-width);
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  padding: 16px 0;
-  transition: width 0.25s ease;
+  padding: 12px 0;
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 
   &.collapsed {
-    width: 64px;
+    width: 68px;
 
     .sidebar-user-card-wrap {
       margin: 0 8px 8px;
@@ -17,9 +18,15 @@
     .sidebar-user-card {
       padding: 8px 0;
       justify-content: center;
+      border-radius: 12px;
 
       .user-meta {
         display: none;
+      }
+      .user-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
       }
     }
 
@@ -104,31 +111,29 @@
 
 .sidebar-user-card {
   width: 100%;
-  padding: 10px;
-  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border: 1px solid transparent;
   border-radius: 12px;
-  background: var(--bg-secondary);
+  background: transparent;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 56px;
+  gap: 12px;
+  min-height: 52px;
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.2s ease;
 
   &:hover {
-    border-color: rgba(99, 102, 241, 0.32);
-    background: var(--bg-tertiary);
+    background: var(--bg-hover);
   }
 
   &.menu-open {
-    border-color: rgba(99, 102, 241, 0.44);
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
+    background: var(--bg-hover);
   }
 
   .user-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
     overflow: hidden;
     background: linear-gradient(135deg, var(--primary), var(--primary-hover));
     display: flex;
@@ -144,7 +149,7 @@
 
     span {
       color: var(--on-primary);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
     }
   }
@@ -152,24 +157,29 @@
   .user-meta {
     min-width: 0;
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
   .user-name {
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text-primary);
-    font-weight: 600;
+    font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.2;
   }
 
   .user-wxid {
-    margin-top: 2px;
-    font-size: 11px;
-    color: var(--text-tertiary);
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.2;
   }
 
   .user-menu-caret {
@@ -197,7 +207,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 9999px;
+  border-radius: 8px;
   color: var(--text-secondary);
   text-decoration: none;
   transition: all 0.2s ease;
@@ -208,13 +218,14 @@
   font-family: inherit;
 
   &:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-hover);
     color: var(--text-primary);
   }
 
   &.active {
-    background: var(--primary);
-    color: var(--on-primary);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-weight: 500;
   }
 }
 

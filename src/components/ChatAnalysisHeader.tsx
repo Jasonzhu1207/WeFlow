@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronLeft } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import './ChatAnalysisHeader.scss'
+import { cn } from '@/lib/utils'
 
 export type ChatAnalysisMode = 'private' | 'group'
 
@@ -56,48 +56,91 @@ function ChatAnalysisHeader({ currentMode, actions }: ChatAnalysisHeaderProps) {
   }, [menuOpen])
 
   return (
-    <div className="chat-analysis-header">
-      <div className="chat-analysis-breadcrumb">
+    <div className="flex items-center justify-between gap-3 shrink-0">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-1.5 text-sm">
         <button
           type="button"
-          className="chat-analysis-back"
+          className={cn(
+            'inline-flex items-center gap-1 px-2 py-1.5',
+            'border-none rounded-lg bg-transparent',
+            'text-text-secondary cursor-pointer',
+            'transition-colors duration-200',
+            'hover:bg-surface-tertiary hover:text-text'
+          )}
           onClick={() => navigate('/analytics')}
         >
           <ChevronLeft size={16} />
           <span>聊天分析</span>
         </button>
-        <span className="chat-analysis-breadcrumb-separator">/</span>
-        <div className="chat-analysis-dropdown" ref={dropdownRef}>
+
+        <span className="text-text-muted select-none">/</span>
+
+        {/* Mode dropdown */}
+        <div className="relative" ref={dropdownRef}>
           <button
             type="button"
-            className={`chat-analysis-current-trigger ${menuOpen ? 'open' : ''}`}
+            className={cn(
+              'inline-flex items-center gap-1 px-2 py-1.5',
+              'border-none rounded-lg bg-transparent',
+              'text-text font-medium cursor-pointer',
+              'transition-colors duration-200',
+              'hover:bg-surface-tertiary',
+              menuOpen && 'bg-surface-tertiary'
+            )}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((prev) => !prev)}
           >
-            <span className="current">{currentLabel}</span>
-            <ChevronDown size={14} />
+            <span>{currentLabel}</span>
+            <ChevronDown
+              size={14}
+              className={cn(
+                'transition-transform duration-200',
+                menuOpen && 'rotate-180'
+              )}
+            />
           </button>
 
-          {menuOpen && (
-            <div className="chat-analysis-menu" role="menu" aria-label="切换聊天分析类型">
-              <button
-                type="button"
-                role="menuitem"
-                className="chat-analysis-menu-item"
-                onClick={() => {
-                  setMenuOpen(false)
-                  navigate(MODE_CONFIG[alternateMode].path)
-                }}
-              >
-                {MODE_CONFIG[alternateMode].label}
-              </button>
-            </div>
-          )}
+          {/* Dropdown menu */}
+          <div
+            className={cn(
+              'absolute left-0 top-[calc(100%+4px)] z-20',
+              'min-w-[140px] p-1 rounded-xl',
+              'border border-border',
+              'bg-[var(--bg-secondary-solid,var(--bg-primary))]',
+              'shadow-[0_8px_20px_rgba(15,23,42,0.12)]',
+              'transition-all duration-200 origin-top',
+              menuOpen
+                ? 'opacity-100 scale-100 pointer-events-auto'
+                : 'opacity-0 scale-95 pointer-events-none'
+            )}
+            role="menu"
+            aria-label="切换聊天分析类型"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className={cn(
+                'w-full border-none rounded-lg bg-transparent',
+                'text-text px-3 py-2 text-[13px] font-medium',
+                'cursor-pointer text-left',
+                'transition-colors duration-200',
+                'hover:bg-surface-tertiary'
+              )}
+              onClick={() => {
+                setMenuOpen(false)
+                navigate(MODE_CONFIG[alternateMode].path)
+              }}
+            >
+              {MODE_CONFIG[alternateMode].label}
+            </button>
+          </div>
         </div>
       </div>
 
-      {actions ? <div className="chat-analysis-actions">{actions}</div> : null}
+      {/* Action buttons */}
+      {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
     </div>
   )
 }

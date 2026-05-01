@@ -1,11 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, FolderClosed, Footprints, Users, ArchiveRestore } from 'lucide-react'
+import {
+  Home, MessageSquare, BarChart3, FileText, Settings,
+  Download, Aperture, UserCircle, Lock, LockOpen,
+  ChevronUp, FolderClosed, Footprints, Users, ArchiveRestore
+} from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import * as configService from '../services/config'
 import { onExportSessionStatus, requestExportSessionStatus } from '../services/exportBridge'
+import { cn } from '@/lib/utils'
 
-import './Sidebar.scss'
+/* ─────────────────────────── Types & Helpers ─────────────────────────── */
 
 interface SidebarUserProfile {
   wxid: string
@@ -95,6 +100,17 @@ const normalizeAccountId = (value?: string | null): string => {
   return suffixMatch ? suffixMatch[1] : trimmed
 }
 
+/* ─────────────────────────── Navigation Config ───────────────────────── */
+
+interface NavItem {
+  to: string
+  icon: React.ElementType
+  label: string
+  badge?: string | null
+}
+
+/* ─────────────────────────── Component ────────────────────────────────── */
+
 interface SidebarProps {
   collapsed: boolean
 }
@@ -111,6 +127,8 @@ function Sidebar({ collapsed }: SidebarProps) {
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
   const accountCardWrapRef = useRef<HTMLDivElement | null>(null)
   const setLocked = useAppStore(state => state.setLocked)
+
+  /* ── Side effects (unchanged logic) ─────────────────────────────── */
 
   useEffect(() => {
     window.electronAPI.auth.verifyEnabled().then(setAuthEnabled)
@@ -285,6 +303,8 @@ function Sidebar({ collapsed }: SidebarProps) {
     }
   }, [])
 
+  /* ── Derived ─────────────────────────────────────────────────────── */
+
   const getAvatarLetter = (name: string): string => {
     if (!name) return '微'
     const visible = name.trim()
@@ -308,194 +328,247 @@ function Sidebar({ collapsed }: SidebarProps) {
   const isActive = (path: string) => {
     return location.pathname === path || location.pathname.startsWith(`${path}/`)
   }
+
   const exportTaskBadge = activeExportTaskCount > 99 ? '99+' : `${activeExportTaskCount}`
 
+  /* ── Navigation items ────────────────────────────────────────────── */
+
+  const navItems: NavItem[] = [
+    { to: '/home', icon: Home, label: '首页' },
+    { to: '/chat', icon: MessageSquare, label: '聊天' },
+    { to: '/sns', icon: Aperture, label: '朋友圈' },
+    { to: '/contacts', icon: UserCircle, label: '通讯录' },
+    { to: '/resources', icon: FolderClosed, label: '资源浏览' },
+    { to: '/analytics', icon: BarChart3, label: '聊天分析' },
+    { to: '/annual-report', icon: FileText, label: '年度报告' },
+    { to: '/footprint', icon: Footprints, label: '我的足迹' },
+    {
+      to: '/export', icon: Download, label: '导出',
+      badge: activeExportTaskCount > 0 ? exportTaskBadge : null
+    },
+    { to: '/backup', icon: ArchiveRestore, label: '数据库备份' },
+  ]
+
+  /* ── Render ──────────────────────────────────────────────────────── */
+
   return (
-    <>
-      <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
-        <nav className="nav-menu">
-          {/* 首页 */}
-          <NavLink
-            to="/home"
-            className={`nav-item ${isActive('/home') ? 'active' : ''}`}
-            title={collapsed ? '首页' : undefined}
-          >
-            <span className="nav-icon"><Home size={20} /></span>
-            <span className="nav-label">首页</span>
-          </NavLink>
+    <aside
+      className={cn(
+        'flex flex-col border-r border-border bg-surface-secondary',
+        'transition-[width] duration-250 ease-in-out shrink-0 overflow-hidden',
+        collapsed ? 'w-[var(--spacing-sidebar-collapsed)]' : 'w-[var(--spacing-sidebar)]'
+      )}
+    >
+      {/* Navigation */}
+      <nav className={cn(
+        'flex-1 flex flex-col gap-0.5 overflow-y-auto scrollbar-thin',
+        'pt-2',
+        collapsed ? 'px-2' : 'px-3'
+      )}>
+        {navItems.map((item) => {
+          const Icon = item.icon
+          const active = isActive(item.to)
 
-          {/* 聊天 */}
-          <NavLink
-            to="/chat"
-            className={`nav-item ${isActive('/chat') ? 'active' : ''}`}
-            title={collapsed ? '聊天' : undefined}
-          >
-            <span className="nav-icon"><MessageSquare size={20} /></span>
-            <span className="nav-label">聊天</span>
-          </NavLink>
-
-          {/* 朋友圈 */}
-          <NavLink
-            to="/sns"
-            className={`nav-item ${isActive('/sns') ? 'active' : ''}`}
-            title={collapsed ? '朋友圈' : undefined}
-          >
-            <span className="nav-icon"><Aperture size={20} /></span>
-            <span className="nav-label">朋友圈</span>
-          </NavLink>
-
-          {/* 通讯录 */}
-          <NavLink
-            to="/contacts"
-            className={`nav-item ${isActive('/contacts') ? 'active' : ''}`}
-            title={collapsed ? '通讯录' : undefined}
-          >
-            <span className="nav-icon"><UserCircle size={20} /></span>
-            <span className="nav-label">通讯录</span>
-          </NavLink>
-
-          {/* 资源浏览 */}
-          <NavLink
-            to="/resources"
-            className={`nav-item ${isActive('/resources') ? 'active' : ''}`}
-            title={collapsed ? '资源浏览' : undefined}
-          >
-            <span className="nav-icon"><FolderClosed size={20} /></span>
-            <span className="nav-label">资源浏览</span>
-          </NavLink>
-
-          {/* 聊天分析 */}
-          <NavLink
-            to="/analytics"
-            className={`nav-item ${isActive('/analytics') ? 'active' : ''}`}
-            title={collapsed ? '聊天分析' : undefined}
-          >
-            <span className="nav-icon"><BarChart3 size={20} /></span>
-            <span className="nav-label">聊天分析</span>
-          </NavLink>
-
-          {/* 年度报告 */}
-          <NavLink
-            to="/annual-report"
-            className={`nav-item ${isActive('/annual-report') ? 'active' : ''}`}
-            title={collapsed ? '年度报告' : undefined}
-          >
-            <span className="nav-icon"><FileText size={20} /></span>
-            <span className="nav-label">年度报告</span>
-          </NavLink>
-
-          {/* 我的足迹 */}
-          <NavLink
-            to="/footprint"
-            className={`nav-item ${isActive('/footprint') ? 'active' : ''}`}
-            title={collapsed ? '我的足迹' : undefined}
-          >
-            <span className="nav-icon"><Footprints size={20} /></span>
-            <span className="nav-label">我的足迹</span>
-          </NavLink>
-
-          {/* 导出 */}
-          <NavLink
-            to="/export"
-            className={`nav-item ${isActive('/export') ? 'active' : ''}`}
-            title={collapsed ? '导出' : undefined}
-          >
-            <span className="nav-icon nav-icon-with-badge">
-              <Download size={20} />
-              {collapsed && activeExportTaskCount > 0 && (
-                <span className="nav-badge icon-badge">{exportTaskBadge}</span>
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              title={collapsed ? item.label : undefined}
+              className={cn(
+                'flex items-center gap-3 rounded-lg no-underline',
+                'transition-all duration-200 whitespace-nowrap relative',
+                'border-none bg-transparent cursor-pointer font-[inherit]',
+                collapsed ? 'justify-center px-2.5 py-2.5' : 'px-3 py-2.5',
+                active
+                  ? 'bg-accent text-on-accent'
+                  : 'text-text-secondary hover:bg-surface-hover hover:text-text'
               )}
-            </span>
-            <span className="nav-label">导出</span>
-            {!collapsed && activeExportTaskCount > 0 && (
-              <span className="nav-badge">{exportTaskBadge}</span>
-            )}
-          </NavLink>
-
-          <NavLink
-            to="/backup"
-            className={`nav-item ${isActive('/backup') ? 'active' : ''}`}
-            title={collapsed ? '数据库备份' : undefined}
-          >
-            <span className="nav-icon"><ArchiveRestore size={20} /></span>
-            <span className="nav-label">数据库备份</span>
-          </NavLink>
-
-
-        </nav>
-
-        <div className="sidebar-footer">
-          <button
-            className="nav-item"
-            onClick={() => {
-              if (authEnabled) {
-                setLocked(true)
-                return
-              }
-              navigate('/settings', {
-                state: {
-                  initialTab: 'security',
-                  backgroundLocation: location
-                }
-              })
-            }}
-            title={collapsed ? (authEnabled ? '锁定' : '未锁定') : undefined}
-          >
-            <span className="nav-icon">{authEnabled ? <Lock size={20} /> : <LockOpen size={20} />}</span>
-            <span className="nav-label">{authEnabled ? '锁定' : '未锁定'}</span>
-          </button>
-
-          <div className="sidebar-user-card-wrap" ref={accountCardWrapRef}>
-            <div className={`sidebar-user-menu ${isAccountMenuOpen ? 'open' : ''}`} role="menu" aria-label="账号菜单">
-              <button
-                className="sidebar-user-menu-item"
-                onClick={openAccountManagement}
-                type="button"
-                role="menuitem"
-              >
-                <Users size={14} />
-                <span>账号管理</span>
-              </button>
-              <button
-                className="sidebar-user-menu-item"
-                onClick={openSettingsFromAccountMenu}
-                type="button"
-                role="menuitem"
-              >
-                <Settings size={14} />
-                <span>设置</span>
-              </button>
-            </div>
-            <div
-              className={`sidebar-user-card ${isAccountMenuOpen ? 'menu-open' : ''}`}
-              title={collapsed ? `${userProfile.displayName}${(userProfile.alias) ? `\n${userProfile.alias}` : ''}` : undefined}
-              onClick={() => setIsAccountMenuOpen(prev => !prev)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  setIsAccountMenuOpen(prev => !prev)
-                }
-              }}
             >
-              <div className="user-avatar">
-                {userProfile.avatarUrl ? <img src={userProfile.avatarUrl} alt="" /> : <span>{getAvatarLetter(userProfile.displayName)}</span>}
-              </div>
-              <div className="user-meta">
-                <div className="user-name">{userProfile.displayName || DEFAULT_DISPLAY_NAME}</div>
-                <div className="user-wxid">{userProfile.alias || DEFAULT_SUBTITLE}</div>
-              </div>
+              <span className="flex items-center justify-center w-5 h-5 shrink-0 relative">
+                <Icon size={18} />
+                {/* Badge on icon when collapsed */}
+                {collapsed && item.badge && (
+                  <span className={cn(
+                    'absolute -top-1.5 -right-2.5',
+                    'min-w-4 h-4 px-1 rounded-full',
+                    'bg-[#ff3b30] text-white text-[10px] font-bold',
+                    'inline-flex items-center justify-center leading-none',
+                    'shadow-[0_0_0_2px_var(--bg-secondary)]'
+                  )}>
+                    {item.badge}
+                  </span>
+                )}
+              </span>
               {!collapsed && (
-                <span className={`user-menu-caret ${isAccountMenuOpen ? 'open' : ''}`}>
-                  <ChevronUp size={14} />
+                <>
+                  <span className="text-sm font-medium">{item.label}</span>
+                  {/* Badge when expanded */}
+                  {item.badge && (
+                    <span className={cn(
+                      'ml-auto min-w-5 h-5 px-1.5 rounded-full',
+                      'bg-[#ff3b30] text-white text-[11px] font-bold',
+                      'inline-flex items-center justify-center leading-none',
+                      'shadow-[0_0_0_2px_rgba(255,59,48,0.18)]'
+                    )}>
+                      {item.badge}
+                    </span>
+                  )}
+                </>
+              )}
+            </NavLink>
+          )
+        })}
+      </nav>
+
+      {/* Footer: Lock + User Card */}
+      <div className={cn(
+        'border-t border-border pt-2.5 mt-1 flex flex-col gap-0.5',
+        collapsed ? 'px-2' : 'px-3'
+      )}>
+        {/* Lock button */}
+        <button
+          className={cn(
+            'flex items-center gap-3 rounded-lg',
+            'transition-all duration-200 whitespace-nowrap',
+            'border-none bg-transparent cursor-pointer font-[inherit]',
+            'text-text-secondary hover:bg-surface-hover hover:text-text',
+            collapsed ? 'justify-center px-2.5 py-2.5' : 'px-3 py-2.5'
+          )}
+          onClick={() => {
+            if (authEnabled) {
+              setLocked(true)
+              return
+            }
+            navigate('/settings', {
+              state: {
+                initialTab: 'security',
+                backgroundLocation: location
+              }
+            })
+          }}
+          title={collapsed ? (authEnabled ? '锁定' : '未锁定') : undefined}
+        >
+          <span className="flex items-center justify-center w-5 h-5 shrink-0">
+            {authEnabled ? <Lock size={18} /> : <LockOpen size={18} />}
+          </span>
+          {!collapsed && (
+            <span className="text-sm font-medium">
+              {authEnabled ? '锁定' : '未锁定'}
+            </span>
+          )}
+        </button>
+
+        {/* User card */}
+        <div className="relative pb-2" ref={accountCardWrapRef}>
+          {/* Account popup menu */}
+          <div
+            className={cn(
+              'absolute left-0 right-auto bottom-[calc(100%+6px)]',
+              'min-w-full z-[12]',
+              'border border-border rounded-xl',
+              'bg-[var(--bg-secondary-solid,var(--bg-primary))]',
+              'flex flex-col gap-1 p-1.5',
+              'shadow-[0_8px_20px_rgba(15,23,42,0.12)]',
+              'transition-all duration-200 origin-bottom',
+              isAccountMenuOpen
+                ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto'
+                : 'opacity-0 scale-95 translate-y-2 pointer-events-none'
+            )}
+            role="menu"
+            aria-label="账号菜单"
+          >
+            <button
+              className={cn(
+                'w-full border-none rounded-lg bg-transparent',
+                'text-text px-2.5 py-2 flex items-center gap-2',
+                'text-[13px] font-medium cursor-pointer text-left',
+                'transition-colors duration-200',
+                'hover:bg-surface-tertiary'
+              )}
+              onClick={openAccountManagement}
+              type="button"
+              role="menuitem"
+            >
+              <Users size={14} />
+              <span>账号管理</span>
+            </button>
+            <button
+              className={cn(
+                'w-full border-none rounded-lg bg-transparent',
+                'text-text px-2.5 py-2 flex items-center gap-2',
+                'text-[13px] font-medium cursor-pointer text-left',
+                'transition-colors duration-200',
+                'hover:bg-surface-tertiary'
+              )}
+              onClick={openSettingsFromAccountMenu}
+              type="button"
+              role="menuitem"
+            >
+              <Settings size={14} />
+              <span>设置</span>
+            </button>
+          </div>
+
+          {/* User card trigger */}
+          <div
+            className={cn(
+              'w-full px-2.5 py-2 border border-border rounded-xl',
+              'bg-surface-secondary flex items-center gap-2.5',
+              'min-h-[52px] cursor-pointer select-none',
+              'transition-all duration-200',
+              'hover:border-accent/30 hover:bg-surface-tertiary',
+              isAccountMenuOpen && 'border-accent/40 shadow-[0_0_0_2px_var(--primary-light)]',
+              collapsed && 'px-0 justify-center'
+            )}
+            title={collapsed ? `${userProfile.displayName}${(userProfile.alias) ? `\n${userProfile.alias}` : ''}` : undefined}
+            onClick={() => setIsAccountMenuOpen(prev => !prev)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                setIsAccountMenuOpen(prev => !prev)
+              }
+            }}
+          >
+            {/* Avatar */}
+            <div className={cn(
+              'w-8 h-8 rounded-lg overflow-hidden shrink-0',
+              'bg-gradient-to-br from-accent to-accent-hover',
+              'flex items-center justify-center'
+            )}>
+              {userProfile.avatarUrl ? (
+                <img src={userProfile.avatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-on-accent text-xs font-semibold">
+                  {getAvatarLetter(userProfile.displayName)}
                 </span>
               )}
             </div>
+
+            {/* Meta & caret — hidden when collapsed */}
+            {!collapsed && (
+              <>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] text-text font-semibold truncate">
+                    {userProfile.displayName || DEFAULT_DISPLAY_NAME}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-text-muted truncate">
+                    {userProfile.alias || DEFAULT_SUBTITLE}
+                  </div>
+                </div>
+                <span className={cn(
+                  'text-text-muted inline-flex transition-transform duration-200',
+                  isAccountMenuOpen && 'rotate-180 text-text-secondary'
+                )}>
+                  <ChevronUp size={14} />
+                </span>
+              </>
+            )}
           </div>
         </div>
-      </aside>
-    </>
+      </div>
+    </aside>
   )
 }
 

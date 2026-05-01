@@ -545,8 +545,8 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-surface animate-fade-in relative overflow-hidden">
-      <div className="fixed top-0 left-0 right-[150px] h-10 drag pointer-events-auto z-[2000]" aria-hidden="true" />
+    <div className="app-container">
+      <div className="window-drag-region" aria-hidden="true" />
       {isLocked && (
         <LockScreen
           onUnlock={() => setLocked(false)}
@@ -675,11 +675,11 @@ function App() {
         onCancel={() => handleWindowCloseAction('cancel')}
       />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="main-layout">
         <Sidebar collapsed={sidebarCollapsed} />
-        <main className="flex-1 overflow-auto p-6 relative">
+        <main className="content">
           <RouteGuard>
-            <div className={`h-full ${isExportRoute ? '' : 'hidden'}`} aria-hidden={!isExportRoute}>
+            <div className={`export-keepalive-page ${isExportRoute ? 'active' : 'hidden'}`} aria-hidden={!isExportRoute}>
               <ExportPage />
             </div>
 
@@ -701,7 +701,7 @@ function App() {
               <Route path="/dual-report/view" element={<DualReportWindow />} />
               <Route path="/footprint" element={<MyFootprintPage />} />
 
-              <Route path="/export" element={<div className="hidden" aria-hidden="true" />} />
+              <Route path="/export" element={<div className="export-route-anchor" aria-hidden="true" />} />
               <Route path="/sns" element={<SnsPage />} />
               <Route path="/biz" element={<BizPage />} />
               <Route path="/contacts" element={<ContactsPage />} />

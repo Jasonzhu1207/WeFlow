@@ -1431,6 +1431,20 @@ class HttpService {
     return '.jpg'
   }
 
+  private writeFileIfLarger(fullPath: string, data: Buffer): void {
+    if (fs.existsSync(fullPath)) {
+      try {
+        const stat = fs.statSync(fullPath)
+        if (!stat.isFile()) return
+        if (data.length <= stat.size) return
+      } catch {
+        // If the existing export cannot be inspected, overwrite it below.
+      }
+    }
+
+    fs.writeFileSync(fullPath, data)
+  }
+
   private async exportMediaForMessages(
     messages: Message[],
     talker: string,
@@ -1530,9 +1544,7 @@ class HttpService {
             const targetDir = path.join(sessionDir, 'images')
             const fullPath = path.join(targetDir, fileName)
             this.ensureDir(targetDir)
-            if (!fs.existsSync(fullPath)) {
-              fs.writeFileSync(fullPath, imageBuffer)
-            }
+            this.writeFileIfLarger(fullPath, imageBuffer)
             const relativePath = `${this.sanitizeFileName(talker, 'session')}/images/${fileName}`
             return { kind: 'image', fileName, fullPath, relativePath }
           }
@@ -1545,9 +1557,7 @@ class HttpService {
             const targetDir = path.join(sessionDir, 'images')
             const fullPath = path.join(targetDir, fileName)
             this.ensureDir(targetDir)
-            if (!fs.existsSync(fullPath)) {
-              fs.copyFileSync(imagePath, fullPath)
-            }
+            this.writeFileIfLarger(fullPath, imageBuffer)
             const relativePath = `${this.sanitizeFileName(talker, 'session')}/images/${fileName}`
             return { kind: 'image', fileName, fullPath, relativePath }
           }

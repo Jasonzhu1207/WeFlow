@@ -7,13 +7,37 @@ body:
     attributes:
       value: |
         感谢你为项目提供新想法！详细的需求描述能极大提高该功能被采纳的几率。
+  - type: dropdown
+    id: duplicate-check
+    attributes:
+      label: 是否已有相同问题？
+      description: 请先搜索现有 Issues
+      options:
+        - 是，已有相同问题
+        - 否，没有相同问题
+    validations:
+      required: true
+  - type: input
+    id: confirm-unique
+    attributes:
+      label: 确认唯一性
+      description: 如果选择了"否"，请输入：我已确认没有相同问题出现
+      placeholder: 我已确认没有相同问题出现
+    validations:
+      required: true
+  - type: input
+    id: confirm-useful
+    attributes:
+      label: 你的建议真的有用吗？
+      description: 若你确认则输入：我认为这会对大部分人都有用
+      placeholder: 我认为这会对大部分人都有用
+    validations:
+      required: true
   - type: checkboxes
     id: pre-check
     attributes:
       label: 提交前确认
       options:
-        - label: 我已搜索过现有的 Issues 和 Pull Requests，确认这个功能尚未被提出或实现
-          required: true
         - label: 这是一个全新的功能，而不是对现有功能的改进
           required: true
   - type: dropdown

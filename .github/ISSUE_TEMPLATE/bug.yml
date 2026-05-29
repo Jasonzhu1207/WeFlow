@@ -7,14 +7,50 @@ body:
     attributes:
       value: |
         请提供尽可能详细的信息，帮助我们快速定位和修复问题。
+  - type: dropdown
+    id: duplicate-check
+    attributes:
+      label: 是否已有相同问题？
+      description: 请先搜索现有 Issues
+      options:
+        - 是，已有相同问题
+        - 否，没有相同问题
+    validations:
+      required: true
+  - type: input
+    id: confirm-unique
+    attributes:
+      label: 确认唯一性
+      description: 如果选择了"否"，请输入：我已确认没有相同问题出现
+      placeholder: 我已确认没有相同问题出现
+    validations:
+      required: true
+  - type: dropdown
+    id: standard-operation
+    attributes:
+      label: 这是标准操作流程下出现的问题吗？
+      description: 确认你是按照正常方式使用，而不是非常规操作
+      options:
+        - 是，标准操作
+        - 否，非标准操作
+    validations:
+      required: true
+  - type: dropdown
+    id: code-issue-confirm
+    attributes:
+      label: 你确认这真的是我们的代码导致的吗？
+      description: 请仔细思考，排除网络、系统、第三方服务等外部因素
+      options:
+        - 是，确认是代码问题
+        - 不确定
+        - 否，可能是其他原因
+    validations:
+      required: true
   - type: checkboxes
     id: pre-check
     attributes:
-      label: 提交前确认
-      description: 请务必确认以下事项
+      label: 基础确认
       options:
-        - label: 我已搜索过现有的 Issues，确认这不是重复问题
-          required: true
         - label: 我使用的是最新版本
           required: true
         - label: 我已阅读过相关文档

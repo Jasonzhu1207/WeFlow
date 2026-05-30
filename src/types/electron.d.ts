@@ -654,6 +654,7 @@ export interface ElectronAPI {
         stale: boolean
         includeRelations: boolean
         source: 'memory' | 'disk' | 'fresh'
+        rangeFiltered?: boolean
       }>
       needsRefresh?: string[]
       error?: string

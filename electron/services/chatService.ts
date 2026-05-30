@@ -208,6 +208,7 @@ interface ExportSessionStatsCacheMeta {
   stale: boolean
   includeRelations: boolean
   source: 'memory' | 'disk' | 'fresh'
+  rangeFiltered?: boolean
 }
 
 interface ExportTabCounts {
@@ -7761,7 +7762,12 @@ class ChatService {
           success: true,
           count: Math.max(0, Math.floor(messageCount as number))
         })
-        : wcdbService.getMessageCount(normalizedSessionId)
+        : this.getSessionMessageCounts([normalizedSessionId], { preferHintCache: true })
+          .then((result) => ({
+            success: result.success,
+            count: result.counts?.[normalizedSessionId],
+            error: result.error
+          }))
 
       const [contactResult, avatarResult, messageCountResult] = await Promise.allSettled([
         contactPromise,
@@ -8066,7 +8072,15 @@ class ChatService {
               endTimestamp
             )
             resultMap[sessionId] = stats
-            if (!useRangeFilter) {
+            if (useRangeFilter) {
+              cacheMeta[sessionId] = {
+                updatedAt: Date.now(),
+                stale: false,
+                includeRelations,
+                source: 'fresh',
+                rangeFiltered: true
+              }
+            } else {
               const updatedAt = this.setSessionStatsCacheEntry(sessionId, stats, includeRelations)
               cacheMeta[sessionId] = {
                 updatedAt,
@@ -8093,7 +8107,15 @@ class ChatService {
               const stats = batchedStatsMap[sessionId]
               if (!stats) continue
               resultMap[sessionId] = stats
-              if (!useRangeFilter) {
+              if (useRangeFilter) {
+                cacheMeta[sessionId] = {
+                  updatedAt: Date.now(),
+                  stale: false,
+                  includeRelations,
+                  source: 'fresh',
+                  rangeFiltered: true
+                }
+              } else {
                 const updatedAt = this.setSessionStatsCacheEntry(sessionId, stats, includeRelations)
                 cacheMeta[sessionId] = {
                   updatedAt,
@@ -8121,7 +8143,15 @@ class ChatService {
                 endTimestamp
               )
               resultMap[sessionId] = stats
-              if (!useRangeFilter) {
+              if (useRangeFilter) {
+                cacheMeta[sessionId] = {
+                  updatedAt: Date.now(),
+                  stale: false,
+                  includeRelations,
+                  source: 'fresh',
+                  rangeFiltered: true
+                }
+              } else {
                 const updatedAt = this.setSessionStatsCacheEntry(sessionId, stats, includeRelations)
                 cacheMeta[sessionId] = {
                   updatedAt,
@@ -8132,6 +8162,15 @@ class ChatService {
               }
             } catch {
               resultMap[sessionId] = this.buildEmptyExportSessionStats(sessionId, includeRelations)
+              if (useRangeFilter) {
+                cacheMeta[sessionId] = {
+                  updatedAt: Date.now(),
+                  stale: true,
+                  includeRelations,
+                  source: 'fresh',
+                  rangeFiltered: true
+                }
+              }
             }
           })
         }

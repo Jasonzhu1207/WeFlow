@@ -1384,6 +1384,7 @@ interface SessionExportCacheMeta {
   stale: boolean
   includeRelations: boolean
   source: 'memory' | 'disk' | 'fresh'
+  rangeFiltered?: boolean
 }
 
 type SessionLoadStageStatus = 'pending' | 'loading' | 'done' | 'failed'
@@ -1600,6 +1601,12 @@ const normalizeTimestampSeconds = (value: unknown): number | undefined => {
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed <= 0) return undefined
   return Math.floor(parsed)
+}
+
+const mergeStableCount = (incoming: number | undefined, previous: number | undefined): number | undefined => {
+  if (typeof incoming !== 'number') return previous
+  if (incoming === 0 && typeof previous === 'number' && previous > 0) return previous
+  return incoming
 }
 
 const clampExportSelectionToBounds = (
@@ -2368,27 +2375,6 @@ function ExportPage() {
     displayNamePreference: 'remark',
     exportConcurrency: 2
   })
-
-  const exportStatsRangeOptions = useMemo(() => {
-    if (options.useAllTime || !options.dateRange) return null
-    const beginTimestamp = Math.floor(options.dateRange.start.getTime() / 1000)
-    const endTimestamp = Math.floor(options.dateRange.end.getTime() / 1000)
-    if (!Number.isFinite(beginTimestamp) || !Number.isFinite(endTimestamp)) return null
-    if (beginTimestamp <= 0 && endTimestamp <= 0) return null
-    return {
-      beginTimestamp: Math.max(0, beginTimestamp),
-      endTimestamp: Math.max(0, endTimestamp)
-    }
-  }, [options.useAllTime, options.dateRange])
-
-  const withExportStatsRange = useCallback((statsOptions: Record<string, any>): Record<string, any> => {
-    if (!exportStatsRangeOptions) return statsOptions
-    return {
-      ...statsOptions,
-      beginTimestamp: exportStatsRangeOptions.beginTimestamp,
-      endTimestamp: exportStatsRangeOptions.endTimestamp
-    }
-  }, [exportStatsRangeOptions])
 
   const [exportDialog, setExportDialog] = useState<ExportDialogState>({
     open: false,
@@ -3673,9 +3659,16 @@ function ExportPage() {
     return []
   }, [sessionSnsCommentRankings, sessionSnsLikeRankings, sessionSnsRankMode])
 
-  const mergeSessionContentMetrics = useCallback((input: Record<string, SessionExportMetric | SessionContentMetric | undefined>) => {
+  const mergeSessionContentMetrics = useCallback((
+    input: Record<string, SessionExportMetric | SessionContentMetric | undefined>,
+    options?: {
+      mergeTotalMessages?: boolean
+      preserveExistingTotalOnZero?: boolean
+    }
+  ) => {
     const entries = Object.entries(input)
     if (entries.length === 0) return
+    const mergeTotalMessages = options?.mergeTotalMessages !== false
 
     const nextMessageCounts: Record<string, number> = {}
     const nextMetrics: Record<string, SessionContentMetric> = {}
@@ -3683,7 +3676,13 @@ function ExportPage() {
     for (const [sessionIdRaw, metricRaw] of entries) {
       const sessionId = String(sessionIdRaw || '').trim()
       if (!sessionId || !metricRaw) continue
-      const totalMessages = normalizeMessageCount(metricRaw.totalMessages)
+      const previous = sessionContentMetricsRef.current[sessionId] || {}
+      const incomingTotalMessages = normalizeMessageCount(metricRaw.totalMessages)
+      const totalMessages = mergeTotalMessages
+        ? (options?.preserveExistingTotalOnZero
+          ? mergeStableCount(incomingTotalMessages, previous.totalMessages)
+          : incomingTotalMessages)
+        : undefined
       const voiceMessages = normalizeMessageCount(metricRaw.voiceMessages)
       const imageMessages = normalizeMessageCount(metricRaw.imageMessages)
       const videoMessages = normalizeMessageCount(metricRaw.videoMessages)
@@ -3729,8 +3728,12 @@ function ExportPage() {
         let changed = false
         const merged = { ...prev }
         for (const [sessionId, count] of Object.entries(nextMessageCounts)) {
-          if (merged[sessionId] === count) continue
-          merged[sessionId] = count
+          const previousCount = normalizeMessageCount(merged[sessionId])
+          const nextCount = options?.preserveExistingTotalOnZero
+            ? mergeStableCount(count, previousCount)
+            : count
+          if (typeof nextCount !== 'number' || previousCount === nextCount) continue
+          merged[sessionId] = nextCount
           changed = true
         }
         return changed ? merged : prev
@@ -3744,7 +3747,11 @@ function ExportPage() {
         for (const [sessionId, metric] of Object.entries(nextMetrics)) {
           const previous = merged[sessionId] || {}
           const nextMetric: SessionContentMetric = {
-            totalMessages: typeof metric.totalMessages === 'number' ? metric.totalMessages : previous.totalMessages,
+            totalMessages: mergeTotalMessages
+              ? (options?.preserveExistingTotalOnZero
+                ? mergeStableCount(metric.totalMessages, previous.totalMessages)
+                : (typeof metric.totalMessages === 'number' ? metric.totalMessages : previous.totalMessages))
+              : previous.totalMessages,
             voiceMessages: typeof metric.voiceMessages === 'number' ? metric.voiceMessages : previous.voiceMessages,
             imageMessages: typeof metric.imageMessages === 'number' ? metric.imageMessages : previous.imageMessages,
             videoMessages: typeof metric.videoMessages === 'number' ? metric.videoMessages : previous.videoMessages,
@@ -4084,7 +4091,10 @@ function ExportPage() {
     }
   }, [isSessionMediaMetricReady, patchSessionLoadTraceStage])
 
-  const applySessionMediaMetricsFromStats = useCallback((data?: Record<string, SessionExportMetric>) => {
+  const applySessionMediaMetricsFromStats = useCallback((
+    data?: Record<string, SessionExportMetric>,
+    cache?: Record<string, SessionExportCacheMeta>
+  ) => {
     if (!data) return
     const nextMetrics: Record<string, SessionContentMetric> = {}
     let hasPatch = false
@@ -4093,19 +4103,25 @@ function ExportPage() {
       if (!sessionId) continue
       const metric = pickSessionMediaMetric(metricRaw)
       if (!metric) continue
-      nextMetrics[sessionId] = metric
+      const metricForMerge = cache?.[sessionId]?.rangeFiltered
+        ? (() => {
+          const { totalMessages: _totalMessages, ...rest } = metric
+          return rest
+        })()
+        : metric
+      nextMetrics[sessionId] = metricForMerge
       hasPatch = true
       sessionMediaMetricPendingPersistRef.current[sessionId] = {
         ...sessionMediaMetricPendingPersistRef.current[sessionId],
-        ...metric
+        ...metricForMerge
       }
-      if (hasCompleteSessionMediaMetric(metric)) {
+      if (hasCompleteSessionMediaMetric(metricForMerge)) {
         sessionMediaMetricReadySetRef.current.add(sessionId)
       }
     }
 
     if (hasPatch) {
-      mergeSessionContentMetrics(nextMetrics)
+      mergeSessionContentMetrics(nextMetrics, { preserveExistingTotalOnZero: true })
       scheduleFlushSessionMediaMetricCache()
     }
   }, [mergeSessionContentMetrics, scheduleFlushSessionMediaMetricCache])
@@ -4155,14 +4171,17 @@ function ExportPage() {
           const cacheResult = await withTimeout(
             window.electronAPI.chat.getExportSessionStats(
               batchSessionIds,
-              withExportStatsRange({ includeRelations: false, allowStaleCache: true, cacheOnly: true })
+              { includeRelations: false, allowStaleCache: true, cacheOnly: true }
             ),
             12000,
             'cacheOnly'
           )
           if (runId !== sessionMediaMetricRunIdRef.current) return
           if (cacheResult.success && cacheResult.data) {
-            applySessionMediaMetricsFromStats(cacheResult.data as Record<string, SessionExportMetric>)
+            applySessionMediaMetricsFromStats(
+              cacheResult.data as Record<string, SessionExportMetric>,
+              cacheResult.cache as Record<string, SessionExportCacheMeta> | undefined
+            )
           }
 
           const missingSessionIds = batchSessionIds.filter(sessionId => !isSessionMediaMetricReady(sessionId))
@@ -4170,14 +4189,17 @@ function ExportPage() {
             const freshResult = await withTimeout(
               window.electronAPI.chat.getExportSessionStats(
                 missingSessionIds,
-                withExportStatsRange({ includeRelations: false, allowStaleCache: true })
+                { includeRelations: false, allowStaleCache: true }
               ),
               45000,
               'fresh'
             )
             if (runId !== sessionMediaMetricRunIdRef.current) return
             if (freshResult.success && freshResult.data) {
-              applySessionMediaMetricsFromStats(freshResult.data as Record<string, SessionExportMetric>)
+              applySessionMediaMetricsFromStats(
+                freshResult.data as Record<string, SessionExportMetric>,
+                freshResult.cache as Record<string, SessionExportCacheMeta> | undefined
+              )
             }
           }
 
@@ -4214,7 +4236,7 @@ function ExportPage() {
         void runSessionMediaMetricWorker(runId)
       }
     }
-  }, [applySessionMediaMetricsFromStats, isSessionMediaMetricReady, patchSessionLoadTraceStage, withExportStatsRange])
+  }, [applySessionMediaMetricsFromStats, isSessionMediaMetricReady, patchSessionLoadTraceStage])
 
   const scheduleSessionMediaMetricWorker = useCallback(() => {
     if (activeTaskCountRef.current > 0) return
@@ -5051,9 +5073,10 @@ function ExportPage() {
     const applyStatsResult = (result?: {
       success: boolean
       data?: Record<string, SessionExportMetric>
+      cache?: Record<string, SessionExportCacheMeta>
     } | null) => {
       if (!result?.success || !result.data) return
-      applySessionMediaMetricsFromStats(result.data)
+      applySessionMediaMetricsFromStats(result.data, result.cache)
       for (const sessionId of normalizedSessionIds) {
         absorbMetric(sessionId, result.data[sessionId])
       }
@@ -7326,13 +7349,21 @@ function ExportPage() {
     cacheMeta?: SessionExportCacheMeta,
     relationLoadedOverride?: boolean
   ) => {
-    mergeSessionContentMetrics({ [sessionId]: metric })
+    const isRangeFilteredMetric = cacheMeta?.rangeFiltered === true
+    mergeSessionContentMetrics({ [sessionId]: metric }, {
+      mergeTotalMessages: !isRangeFilteredMetric,
+      preserveExistingTotalOnZero: true
+    })
     setSessionDetail((prev) => {
       if (!prev || prev.wxid !== sessionId) return prev
       const relationLoaded = relationLoadedOverride ?? Boolean(prev.relationStatsLoaded)
+      const messageCount = mergeStableCount(
+        !isRangeFilteredMetric && Number.isFinite(metric.totalMessages) ? metric.totalMessages : undefined,
+        prev.messageCount
+      )
       return {
         ...prev,
-        messageCount: Number.isFinite(metric.totalMessages) ? metric.totalMessages : prev.messageCount,
+        messageCount: Number.isFinite(messageCount) ? messageCount as number : prev.messageCount,
         voiceMessages: Number.isFinite(metric.voiceMessages) ? metric.voiceMessages : prev.voiceMessages,
         imageMessages: Number.isFinite(metric.imageMessages) ? metric.imageMessages : prev.imageMessages,
         videoMessages: Number.isFinite(metric.videoMessages) ? metric.videoMessages : prev.videoMessages,
@@ -7364,8 +7395,6 @@ function ExportPage() {
     const preciseCacheKey = `${exportCacheScopeRef.current}::${normalizedSessionId}`
 
     detailStatsPriorityRef.current = true
-    sessionCountRequestIdRef.current += 1
-    setIsLoadingSessionCounts(false)
 
     const requestSeq = ++detailRequestSeqRef.current
     const mappedSession = sessionRowByUsername.get(normalizedSessionId)
@@ -7428,16 +7457,19 @@ function ExportPage() {
         const fastMessageCount = normalizeMessageCount(result.detail.messageCount)
         if (typeof fastMessageCount === 'number') {
           setSessionMessageCounts((prev) => {
-            if (prev[normalizedSessionId] === fastMessageCount) return prev
+            const nextCount = mergeStableCount(fastMessageCount, normalizeMessageCount(prev[normalizedSessionId]))
+            if (typeof nextCount !== 'number' || prev[normalizedSessionId] === nextCount) return prev
             return {
               ...prev,
-              [normalizedSessionId]: fastMessageCount
+              [normalizedSessionId]: nextCount
             }
           })
           mergeSessionContentMetrics({
             [normalizedSessionId]: {
               totalMessages: fastMessageCount
             }
+          }, {
+            preserveExistingTotalOnZero: true
           })
         }
         setSessionDetail((prev) => ({
@@ -7447,7 +7479,9 @@ function ExportPage() {
           nickName: result.detail!.nickName ?? prev?.nickName,
           alias: result.detail!.alias ?? prev?.alias,
           avatarUrl: result.detail!.avatarUrl || prev?.avatarUrl,
-          messageCount: Number.isFinite(result.detail!.messageCount) ? result.detail!.messageCount : prev?.messageCount ?? Number.NaN,
+          messageCount: Number.isFinite(result.detail!.messageCount)
+            ? mergeStableCount(result.detail!.messageCount, prev?.messageCount) ?? Number.NaN
+            : prev?.messageCount ?? Number.NaN,
           voiceMessages: prev?.voiceMessages,
           imageMessages: prev?.imageMessages,
           videoMessages: prev?.videoMessages,
@@ -7507,7 +7541,7 @@ function ExportPage() {
       try {
         const quickStatsResult = await window.electronAPI.chat.getExportSessionStats(
           [normalizedSessionId],
-          withExportStatsRange({ includeRelations: false, allowStaleCache: true, cacheOnly: true })
+          { includeRelations: false, allowStaleCache: true, cacheOnly: true }
         )
         if (requestSeq !== detailRequestSeqRef.current) return
         if (quickStatsResult.success) {
@@ -7534,7 +7568,7 @@ function ExportPage() {
       try {
         const relationCacheResult = await window.electronAPI.chat.getExportSessionStats(
           [normalizedSessionId],
-          withExportStatsRange({ includeRelations: true, allowStaleCache: true, cacheOnly: true })
+          { includeRelations: true, allowStaleCache: true, cacheOnly: true }
         )
         if (requestSeq !== detailRequestSeqRef.current) return
         if (relationCacheResult.success && relationCacheResult.data) {
@@ -7559,7 +7593,7 @@ function ExportPage() {
             // 后台补齐非关系统计，不走精确特型扫描，避免阻塞列表统计队列。
             const freshResult = await window.electronAPI.chat.getExportSessionStats(
               [normalizedSessionId],
-              withExportStatsRange({ includeRelations: false, forceRefresh: true })
+              { includeRelations: false, forceRefresh: true }
             )
             if (requestSeq !== detailRequestSeqRef.current) return
             if (freshResult.success && freshResult.data) {
@@ -7594,7 +7628,7 @@ function ExportPage() {
         setIsLoadingSessionDetailExtra(false)
       }
     }
-  }, [applySessionDetailStats, contactByUsername, mergeSessionContentMetrics, sessionContentMetrics, sessionMessageCounts, sessionRowByUsername, withExportStatsRange])
+  }, [applySessionDetailStats, contactByUsername, mergeSessionContentMetrics, sessionContentMetrics, sessionMessageCounts, sessionRowByUsername])
 
   const loadSessionRelationStats = useCallback(async (options?: { forceRefresh?: boolean }) => {
     const normalizedSessionId = String(sessionDetail?.wxid || '').trim()
@@ -7607,7 +7641,7 @@ function ExportPage() {
       if (!forceRefresh) {
         const relationCacheResult = await window.electronAPI.chat.getExportSessionStats(
           [normalizedSessionId],
-          withExportStatsRange({ includeRelations: true, allowStaleCache: true, cacheOnly: true })
+          { includeRelations: true, allowStaleCache: true, cacheOnly: true }
         )
         if (requestSeq !== detailRequestSeqRef.current) return
 
@@ -7625,7 +7659,7 @@ function ExportPage() {
 
       const relationResult = await window.electronAPI.chat.getExportSessionStats(
         [normalizedSessionId],
-        withExportStatsRange({ includeRelations: true, forceRefresh, preferAccurateSpecialTypes: true })
+        { includeRelations: true, forceRefresh, preferAccurateSpecialTypes: true }
       )
       if (requestSeq !== detailRequestSeqRef.current) return
 
@@ -7645,7 +7679,7 @@ function ExportPage() {
         setIsLoadingSessionRelationStats(false)
       }
     }
-  }, [applySessionDetailStats, isLoadingSessionRelationStats, sessionDetail?.wxid, withExportStatsRange])
+  }, [applySessionDetailStats, isLoadingSessionRelationStats, sessionDetail?.wxid])
 
   const handleRefreshTableData = useCallback(async () => {
     const scopeKey = await ensureExportCacheScope()
